@@ -30,7 +30,7 @@ import (
 
 // Help return message about
 func Help(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Привет друг!")
+	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
 }
 
 // UploadFile to server and return link to it
@@ -57,7 +57,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tempFile.Write(fileBytes)
-	fmt.Fprintln(w, "https://wpaste.cyou/"+ strings.TrimPrefix(filepath.Base(tempFile.Name()), "ufile-"))
+	fmt.Fprintln(w, "https://wpaste.cyou/"+strings.TrimPrefix(filepath.Base(tempFile.Name()), "ufile-"))
 }
 
 // SendFile return file by it ID
