@@ -65,12 +65,12 @@ func TempFile(dir string) (f *os.File, err error) {
 	return
 }
 
-// Help return message about
+// Help redirect to github
 func Help(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
 }
 
-// UploadFile to server and return link to it
+// UploadFile save file and response it ID
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength > 10<<20 {
 		fmt.Fprint(w, "File is too large")
@@ -95,7 +95,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, filepath.Base(tempFile.Name()))
 }
 
-// SendFile return file by it ID
+// SendFile respond file by it ID
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	file, err := ioutil.ReadFile(FilesDir() + "/" + vars["id"])
@@ -106,7 +106,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, string(file))
 }
 
-// WpasteRouter return server router
+// WpasteRouter make router with all needed Handlers
 func WpasteRouter() *mux.Router {
 	Router := mux.NewRouter().StrictSlash(true)
 
@@ -131,7 +131,9 @@ func FilesDir() string {
 	return Basedir() + "/files"
 }
 
-// Install prepare to start
+// Install prepare to start:
+// 1. Make directory for user files
+// 2. Set random seed
 func Install() {
 	os.Mkdir(FilesDir(), 0766)
 	rand.Seed(time.Now().UTC().UnixNano())
