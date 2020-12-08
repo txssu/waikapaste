@@ -41,23 +41,23 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	file := bytes.NewReader([]byte(data))
 
 	if file.Len() > 5*10e6 {
-		fmt.Fprintln(w, "File is too large")
+		fmt.Fprint(w, "File is too large")
 		return
 	}
 
 	tempFile, err := ioutil.TempFile(FilesDir(), "ufile-*")
 	if err != nil {
-		fmt.Println(err)
+		fmt.Print(err)
 	}
 	defer tempFile.Close()
 
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Print(err)
 	}
 
 	tempFile.Write(fileBytes)
-	fmt.Fprintln(w, strings.TrimPrefix(filepath.Base(tempFile.Name()), "ufile-"))
+	fmt.Fprint(w, strings.TrimPrefix(filepath.Base(tempFile.Name()), "ufile-"))
 }
 
 // SendFile return file by it ID
@@ -68,7 +68,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "File %v not found\n", vars["id"])
 		return
 	}
-	fmt.Fprintln(w, string(file))
+	fmt.Fprint(w, string(file))
 }
 
 // WpasteRouter return server router
