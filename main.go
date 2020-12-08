@@ -35,15 +35,13 @@ func Help(w http.ResponseWriter, r *http.Request) {
 
 // UploadFile to server and return link to it
 func UploadFile(w http.ResponseWriter, r *http.Request) {
-	r.ParseMultipartForm(10 << 20)
-
-	data := r.FormValue("f")
-	file := bytes.NewReader([]byte(data))
-
-	if file.Len() > 5*10e6 {
+	if r.ContentLength > 10<<20 {
 		fmt.Fprint(w, "File is too large")
 		return
 	}
+
+	data := r.FormValue("f")
+	file := bytes.NewReader([]byte(data))
 
 	tempFile, err := ioutil.TempFile(FilesDir(), "ufile-*")
 	if err != nil {
