@@ -73,7 +73,8 @@ func Help(w http.ResponseWriter, r *http.Request) {
 // UploadFile save file and response it ID
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength > 10<<20 {
-		fmt.Fprint(w, "File is too large")
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		w.Write([]byte("413 - Max content size is 10MiB"))
 		return
 	}
 
@@ -82,13 +83,15 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	tempFile, err := TempFile(FilesDir())
 	if err != nil {
-		fmt.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Something bad happened!"))
 	}
 	defer tempFile.Close()
 
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
-		fmt.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Something bad happened!"))
 	}
 
 	tempFile.Write(fileBytes)
@@ -100,7 +103,8 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	file, err := ioutil.ReadFile(FilesDir() + "/" + vars["id"])
 	if err != nil {
-		fmt.Fprintf(w, "File %v not found", vars["id"])
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "404 - File %v not found", vars["id"])
 		return
 	}
 	fmt.Fprint(w, string(file))
