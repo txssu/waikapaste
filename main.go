@@ -95,7 +95,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tempFile.Write(fileBytes)
-	fmt.Fprint(w, filepath.Base(tempFile.Name()))
+	w.Write([]byte(filepath.Base(tempFile.Name())))
 }
 
 // SendFile respond file by it ID
@@ -107,7 +107,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "404 - File %v not found", vars["id"])
 		return
 	}
-	fmt.Fprint(w, string(file))
+	w.Write(file)
 }
 
 // WpasteRouter make router with all needed Handlers
