@@ -57,7 +57,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tempFile.Write(fileBytes)
-	fmt.Fprintln(w, "https://wpaste.cyou/"+strings.TrimPrefix(filepath.Base(tempFile.Name()), "ufile-"))
+	fmt.Fprintln(w, strings.TrimPrefix(filepath.Base(tempFile.Name()), "ufile-"))
 }
 
 // SendFile return file by it ID
