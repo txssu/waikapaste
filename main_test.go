@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -9,10 +10,25 @@ import (
 	"testing"
 )
 
-func TestRouting_UploadFiles(t *testing.T) {
+func TestRouting_RedirectFromMain(t *testing.T) {
 	Install()
 	srv := httptest.NewServer(WpasteRouter())
 	defer srv.Close()
+
+	res, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Request.URL.String() == srv.URL {
+		t.Fail()
+	}
+}
+
+func TestRouting_UploadAndGetFiles(t *testing.T) {
+	Install()
+	srv := httptest.NewServer(WpasteRouter())
+	defer srv.Close()
+
 	hc := http.Client{}
 
 	form := url.Values{}
@@ -51,6 +67,41 @@ func TestRouting_UploadFiles(t *testing.T) {
 	}
 
 	if string(body) != "Hello, world!" {
-		t.Fatal(string(body))
+		t.Fail()
+	}
+}
+
+func TestRouting_Errors(t *testing.T) {
+	Install()
+	srv := httptest.NewServer(WpasteRouter())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/testtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 404 {
+		t.Fail()
+	}
+
+	hc := http.Client{}
+
+	form := url.Values{}
+
+	s := bytes.Buffer{}
+	for s.Len() < 10<<20 {
+		s.Write([]byte("s"))
+	}
+
+	form.Add("f", s.String())
+
+	req, err := http.NewRequest("POST", srv.URL, strings.NewReader(form.Encode()))
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	resp, err = hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 413 {
+		t.Fail()
 	}
 }
