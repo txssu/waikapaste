@@ -81,12 +81,27 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	data := r.FormValue("f")
 	file := bytes.NewReader([]byte(data))
 
-	tempFile, err := TempFile(FilesDir())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Something bad happened!"))
+	name := r.FormValue("name")
+
+	var (
+		servFile *os.File
+		err      error
+	)
+	if len(name) == 0 {
+		servFile, err = TempFile(FilesDir())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("500 - Something bad happened!"))
+		}
+	} else {
+		name = filepath.Join(FilesDir(), StringWithCharset(3))
+		servFile, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+		if os.IsExist(err) {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte("409 - This filename already taken!"))
+		}
 	}
-	defer tempFile.Close()
+	defer servFile.Close()
 
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
@@ -94,8 +109,13 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("500 - Something bad happened!"))
 	}
 
-	tempFile.Write(fileBytes)
-	w.Write([]byte(filepath.Base(tempFile.Name())))
+	servFile.Write(fileBytes)
+
+	if len(name) == 0 {
+		name = filepath.Base(servFile.Name())
+	}
+
+	w.Write([]byte(name))
 }
 
 // SendFile respond file by it ID

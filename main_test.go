@@ -105,3 +105,28 @@ func TestRouting_Errors(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestRouting_UploadWithName(t *testing.T) {
+	Install()
+	srv := httptest.NewServer(WpasteRouter())
+	defer srv.Close()
+
+	hc := http.Client{}
+
+	form := url.Values{}
+	form.Add("f", "Hello, world!")
+	form.Add("name", "hi")
+
+	req, err := http.NewRequest("POST", srv.URL, strings.NewReader(form.Encode()))
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	postRes, err := hc.Do(req)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if postRes.StatusCode != http.StatusOK {
+		t.Errorf("status not OK", postRes.StatusCode)
+	}
+	defer postRes.Body.Close()
+}
