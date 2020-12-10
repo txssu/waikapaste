@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,37 @@ import (
 	"strings"
 	"testing"
 )
+
+func createPost(site string, params map[string]string) (*http.Request, error) {
+	form := url.Values{}
+	for key, val := range params {
+		form.Add(key, val)
+	}
+	req, err := http.NewRequest("POST", site, strings.NewReader(form.Encode()))
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	return req, err
+}
+
+func sendAndGet(hc *http.Client, site string, params map[string]string) (*http.Response, error) {
+	req, err := createPost(site, params)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, errors.New("status code not OK")
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+
+	res, err = http.Get(site + "/" + string(body))
+	return res, err
+}
 
 func TestRouting_RedirectFromMain(t *testing.T) {
 	Install()
@@ -31,42 +63,22 @@ func TestRouting_UploadAndGetFiles(t *testing.T) {
 
 	hc := http.Client{}
 
-	form := url.Values{}
-	form.Add("f", "Hello, world!")
+	expected := "Hello, world!"
 
-	req, err := http.NewRequest("POST", srv.URL, strings.NewReader(form.Encode()))
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	postRes, err := hc.Do(req)
-
+	res, err := sendAndGet(&hc, srv.URL, map[string]string{"f": expected})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if postRes.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusOK {
 		t.Errorf("status not OK")
 	}
-	defer postRes.Body.Close()
-
-	bodyRes, err := ioutil.ReadAll(postRes.Body)
-
-	res, err := http.Get(srv.URL + "/" + string(bodyRes))
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if postRes.StatusCode != http.StatusOK {
-		t.Errorf("status not OK")
-	}
-
 	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
 
+	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if string(body) != "Hello, world!" {
+	if string(body) != expected {
 		t.Fail()
 	}
 }
@@ -86,17 +98,15 @@ func TestRouting_Errors(t *testing.T) {
 
 	hc := http.Client{}
 
-	form := url.Values{}
-
 	s := bytes.Buffer{}
 	for s.Len() < 10<<20 {
 		s.Write([]byte("s"))
 	}
 
-	form.Add("f", s.String())
-
-	req, err := http.NewRequest("POST", srv.URL, strings.NewReader(form.Encode()))
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req, err := createPost(srv.URL, map[string]string{"f": s.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err = hc.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -113,20 +123,37 @@ func TestRouting_UploadWithName(t *testing.T) {
 
 	hc := http.Client{}
 
-	form := url.Values{}
-	form.Add("f", "Hello, world!")
-	form.Add("name", "hi")
+	expected := "Hello, world!"
+	name := "hello_world"
 
-	req, err := http.NewRequest("POST", srv.URL, strings.NewReader(form.Encode()))
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	postRes, err := hc.Do(req)
-
+	req, err := createPost(srv.URL, map[string]string{"f": expected, "name": name})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if postRes.StatusCode != http.StatusOK {
+	res, err := hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
 		t.Errorf("status not OK")
 	}
-	defer postRes.Body.Close()
+	res.Body.Close()
+
+	res, err = http.Get(srv.URL + "/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("status not OK")
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != expected {
+		t.Fail()
+	}
 }
