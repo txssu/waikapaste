@@ -92,7 +92,7 @@ func TestRouting_Errors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Fail()
 	}
 
@@ -111,7 +111,7 @@ func TestRouting_Errors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 413 {
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fail()
 	}
 	f := "test"
@@ -124,7 +124,7 @@ func TestRouting_Errors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fail()
 	}
 	req, err = createPost(srv.URL, map[string]string{"f": f, "name": name})
@@ -135,7 +135,7 @@ func TestRouting_Errors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 409 {
+	if resp.StatusCode != http.StatusConflict {
 		t.Fail()
 	}
 }
