@@ -64,6 +64,17 @@ func OpenRandomNameFile(dir string, nameLen int) (f *os.File, err error) {
 	return
 }
 
+// CreateUserFile creates a file with specified OR random name
+func CreateUserFile(dir, name string) (servFile *os.File, err error) {
+	if len(name) == 0 {
+		servFile, err = OpenRandomNameFile(dir, 3)
+	} else {
+		name = filepath.Join(dir, name)
+		servFile, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+	}
+	return
+}
+
 // Help redirect to github
 func Help(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
@@ -80,41 +91,30 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	data := r.FormValue("f")
 	file := bytes.NewReader([]byte(data))
 
-	name := r.FormValue("name")
+	servFile, err := CreateUserFile(FilesDir(), r.FormValue("name"))
 
-	var (
-		servFile *os.File
-		err      error
-	)
-	if len(name) == 0 {
-		servFile, err = OpenRandomNameFile(FilesDir(), 3)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("500 - Something bad happened!"))
-		}
-	} else {
-		name = filepath.Join(FilesDir(), RandomString(3))
-		servFile, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
-		if os.IsExist(err) {
-			w.WriteHeader(http.StatusConflict)
-			w.Write([]byte("409 - This filename already taken!"))
-		}
+	if os.IsExist(err) {
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte("409 - This filename already taken!"))
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Something bad happened!"))
 	}
+
 	defer servFile.Close()
 
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Something bad happened!"))
+		return
 	}
 
 	servFile.Write(fileBytes)
 
-	if len(name) == 0 {
-		name = filepath.Base(servFile.Name())
-	}
-
-	w.Write([]byte(name))
+	ID := filepath.Base(servFile.Name())
+	w.Write([]byte(ID))
 }
 
 // SendFile respond file by it ID
