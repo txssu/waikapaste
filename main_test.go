@@ -126,7 +126,7 @@ func TestRouting_UploadWithName(t *testing.T) {
 	}
 
 	if postRes.StatusCode != http.StatusOK {
-		t.Errorf("status not OK", postRes.StatusCode)
+		t.Errorf("status not OK")
 	}
 	defer postRes.Body.Close()
 }
