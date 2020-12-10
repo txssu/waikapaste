@@ -114,6 +114,30 @@ func TestRouting_Errors(t *testing.T) {
 	if resp.StatusCode != 413 {
 		t.Fail()
 	}
+	f := "test"
+	name := "same"
+	req, err = createPost(srv.URL, map[string]string{"f": f, "name": name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fail()
+	}
+	req, err = createPost(srv.URL, map[string]string{"f": f, "name": name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 409 {
+		t.Fail()
+	}
 }
 
 func TestRouting_UploadWithName(t *testing.T) {
