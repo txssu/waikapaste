@@ -32,9 +32,9 @@ import (
 const charset = "abcdefghijklmnopqrstuvwxyz" +
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-// StringWithCharset creates a random string with the charset
+// RandomString creates a random string with the charset
 // that contains all letters and digits
-func StringWithCharset(length int) string {
+func RandomString(length int) string {
 	b := make([]byte, length)
 	for i := range b {
 		b[i] = charset[rand.Intn(len(charset))]
@@ -52,7 +52,7 @@ func StringWithCharset(length int) string {
 func TempFile(dir string) (f *os.File, err error) {
 	nconflict := 0
 	for i := 0; i < 10000; i++ {
-		name := filepath.Join(dir, StringWithCharset(3))
+		name := filepath.Join(dir, RandomString(3))
 		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 		if os.IsExist(err) {
 			if nconflict++; nconflict > 10 {
@@ -94,7 +94,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("500 - Something bad happened!"))
 		}
 	} else {
-		name = filepath.Join(FilesDir(), StringWithCharset(3))
+		name = filepath.Join(FilesDir(), RandomString(3))
 		servFile, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 		if os.IsExist(err) {
 			w.WriteHeader(http.StatusConflict)
