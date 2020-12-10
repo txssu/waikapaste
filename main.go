@@ -91,7 +91,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	data := r.FormValue("f")
 	file := bytes.NewReader([]byte(data))
 
-	servFile, err := CreateUserFile(FilesDir(), r.FormValue("name"))
+	servFile, err := CreateUserFile(FilesDir, r.FormValue("name"))
 
 	if os.IsExist(err) {
 		w.WriteHeader(http.StatusConflict)
@@ -120,7 +120,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 // SendFile respond file by it ID
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	file, err := ioutil.ReadFile(FilesDir() + "/" + vars["id"])
+	file, err := ioutil.ReadFile(FilesDir + "/" + vars["id"])
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "404 - File %v not found", vars["id"])
@@ -140,25 +140,29 @@ func WpasteRouter() *mux.Router {
 	return Router
 }
 
-// Basedir return root working directory
-func Basedir() string {
-	basedir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+// Working directory
+var (
+	FilesDir string
+	BaseDir  string
+)
+
+// SetDirectories specify working directories
+func SetDirectories() {
+	var err error
+	BaseDir, err = filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
 		log.Fatal(err)
 	}
-	return basedir
-}
-
-// FilesDir return directory where uploaded files stored
-func FilesDir() string {
-	return Basedir() + "/files"
+	FilesDir = filepath.Join(BaseDir, "files")
 }
 
 // Install prepare to start:
-// 1. Make directory for user files
-// 2. Set random seed
+// 1. Set working dirs
+// 2. Make directory for user files
+// 3. Set random seed
 func Install() {
-	os.Mkdir(FilesDir(), 0766)
+	SetDirectories()
+	os.Mkdir(FilesDir, 0766)
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
