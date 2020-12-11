@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func createPost(site string, params map[string]string) (*http.Request, error) {
@@ -44,6 +45,7 @@ func sendAndGet(hc *http.Client, site string, params map[string]string) (*http.R
 
 func TestRouting_RedirectFromMain(t *testing.T) {
 	Install()
+	defer Close()
 	srv := httptest.NewServer(WpasteRouter())
 	defer srv.Close()
 
@@ -58,6 +60,7 @@ func TestRouting_RedirectFromMain(t *testing.T) {
 
 func TestRouting_UploadAndGetFiles(t *testing.T) {
 	Install()
+	defer Close()
 	srv := httptest.NewServer(WpasteRouter())
 	defer srv.Close()
 
@@ -85,6 +88,7 @@ func TestRouting_UploadAndGetFiles(t *testing.T) {
 
 func TestRouting_Errors(t *testing.T) {
 	Install()
+	defer Close()
 	srv := httptest.NewServer(WpasteRouter())
 	defer srv.Close()
 
@@ -140,8 +144,9 @@ func TestRouting_Errors(t *testing.T) {
 	}
 }
 
-func TestRouting_UploadWithName(t *testing.T) {
+func TestRouting_UploadWithNameAndExpires(t *testing.T) {
 	Install()
+	defer Close()
 	srv := httptest.NewServer(WpasteRouter())
 	defer srv.Close()
 
@@ -150,7 +155,7 @@ func TestRouting_UploadWithName(t *testing.T) {
 	expected := "Hello, world!"
 	name := "hello_world"
 
-	req, err := createPost(srv.URL, map[string]string{"f": expected, "name": name})
+	req, err := createPost(srv.URL, map[string]string{"f": expected, "name": name, "e": "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,6 +183,28 @@ func TestRouting_UploadWithName(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(body) != expected {
+		t.Fail()
+	}
+
+	time.Sleep(2 * time.Second)
+
+	res, err = http.Get(srv.URL + "/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusGone {
+		t.Fail()
+	}
+
+	req, err = createPost(srv.URL, map[string]string{"f": expected, "e": "-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusBadRequest {
 		t.Fail()
 	}
 }

@@ -17,6 +17,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -24,9 +25,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
+	"go.etcd.io/bbolt"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyz" +
@@ -75,6 +78,24 @@ func CreateUserFile(dir, name string) (servFile *os.File, err error) {
 	return
 }
 
+// AddExpiresIn add file to db which expires in some time
+func AddExpiresIn(ID, expires string) (int, error) {
+	var exp int
+	fmt.Sscanf(expires, "%d", &exp)
+	if exp < 0 {
+		return http.StatusBadRequest, errors.New("400 - Time shold be positive")
+	}
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("expires"))
+		expiresTime := time.Now().UTC().Add(time.Duration(exp) * time.Second).Unix()
+		return b.Put([]byte(ID), []byte(strconv.FormatInt(expiresTime, 10)))
+	})
+	if err != nil {
+		return http.StatusInternalServerError, errors.New("500 - Something bad happened")
+	}
+	return http.StatusOK, nil
+}
+
 // Help redirect to github
 func Help(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
@@ -105,6 +126,18 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	defer servFile.Close()
 
+	ID := filepath.Base(servFile.Name())
+
+	expires := r.FormValue("e")
+	if len(expires) != 0 {
+		code, err := AddExpiresIn(ID, expires)
+		if err != nil {
+			w.WriteHeader(code)
+			w.Write([]byte(err.Error()))
+			return
+		}
+	}
+
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -114,7 +147,6 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	servFile.Write(fileBytes)
 
-	ID := filepath.Base(servFile.Name())
 	w.Write([]byte(ID))
 }
 
@@ -122,6 +154,27 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
+	var expired bool
+	err := db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("expires"))
+		expires := b.Get([]byte(ID))
+		if expires != nil {
+			var exp int64
+			fmt.Sscanf(string(expires), "%d", &exp)
+			expired = time.Now().UTC().After(time.Unix(exp, 0).UTC())
+		}
+		return nil
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Something bad happened!"))
+		return
+	}
+	if expired {
+		w.WriteHeader(http.StatusGone)
+		fmt.Fprintf(w, "410 - File %v is no longer available", ID)
+		return
+	}
 	file, err := ioutil.ReadFile(filepath.Join(FilesDir, ID))
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -158,6 +211,23 @@ func SetDirectories() {
 	FilesDir = filepath.Join(BaseDir, "files")
 }
 
+var db *bbolt.DB
+
+func initDB() {
+	var err error
+	db, err = bbolt.Open("data.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	db.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("expires"))
+		return err
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 // Install prepare to start:
 // 1. Set working dirs
 // 2. Make directory for user files
@@ -166,9 +236,16 @@ func Install() {
 	SetDirectories()
 	os.Mkdir(FilesDir, 0766)
 	rand.Seed(time.Now().UTC().UnixNano())
+	initDB()
+}
+
+// Close all connections
+func Close() {
+	db.Close()
 }
 
 func main() {
 	Install()
+	defer Close()
 	http.ListenAndServe(":9990", WpasteRouter())
 }
