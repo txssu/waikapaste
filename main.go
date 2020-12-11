@@ -121,10 +121,11 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 // SendFile respond file by it ID
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	file, err := ioutil.ReadFile(filepath.Join(FilesDir, vars["id"]))
+	ID := vars["id"]
+	file, err := ioutil.ReadFile(filepath.Join(FilesDir, ID))
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "404 - File %v not found", vars["id"])
+		fmt.Fprintf(w, "404 - File %v not found", ID)
 		return
 	}
 	w.Write(file)
