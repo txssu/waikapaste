@@ -1,210 +1,130 @@
 package main
 
 import (
-	"bytes"
-	"errors"
-	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/appleboy/gofight"
+	"github.com/stretchr/testify/assert"
 )
 
-func createPost(site string, params map[string]string) (*http.Request, error) {
-	form := url.Values{}
-	for key, val := range params {
-		form.Add(key, val)
-	}
-	req, err := http.NewRequest("POST", site, strings.NewReader(form.Encode()))
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	return req, err
-}
-
-func sendAndGet(hc *http.Client, site string, params map[string]string) (*http.Response, error) {
-	req, err := createPost(site, params)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := hc.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode != http.StatusOK {
-		return nil, errors.New("status code not OK")
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-
-	res, err = http.Get(site + "/" + string(body))
-	return res, err
-}
-
-func TestRouting_RedirectFromMain(t *testing.T) {
+func TestUploadAndGet(t *testing.T) {
 	Install()
 	defer Close()
-	srv := httptest.NewServer(WpasteRouter())
-	defer srv.Close()
-
-	res, err := http.Get(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Request.URL.String() == srv.URL {
-		t.Fail()
-	}
-}
-
-func TestRouting_UploadAndGetFiles(t *testing.T) {
-	Install()
-	defer Close()
-	srv := httptest.NewServer(WpasteRouter())
-	defer srv.Close()
-
-	hc := http.Client{}
+	r := gofight.New()
 
 	expected := "Hello, world!"
-
-	res, err := sendAndGet(&hc, srv.URL, map[string]string{"f": expected})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("status not OK")
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(body) != expected {
-		t.Fail()
-	}
+	var ID string
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": expected,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			ID = r.Body.String()
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+	r.GET("/"+ID).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, expected, r.Body.String())
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
 }
 
-func TestRouting_Errors(t *testing.T) {
+func TestUploadAndGetWithName(t *testing.T) {
 	Install()
 	defer Close()
-	srv := httptest.NewServer(WpasteRouter())
-	defer srv.Close()
+	r := gofight.New()
 
-	resp, err := http.Get(srv.URL + "/testtest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fail()
-	}
+	name := "testname"
+	expected := "Hello, world!"
+	r.POST("/").
+		SetForm(gofight.H{
+			"name": name,
+			"f":    expected,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, expected, r.Body.String())
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+}
 
-	hc := http.Client{}
+func TestFileExpired(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
 
-	s := bytes.Buffer{}
-	for s.Len() < 10<<20 {
-		s.Write([]byte("s"))
-	}
+	e := 1
+	var ID string
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": "*uck. Duck. I said duck.",
+			"e": strconv.Itoa(e),
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			ID = r.Body.String()
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+	time.Sleep(time.Duration(e) * time.Second)
+	r.GET("/"+ID).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusGone, r.Code)
+		})
+}
 
-	req, err := createPost(srv.URL, map[string]string{"f": s.String()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err = hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusRequestEntityTooLarge {
-		t.Fail()
-	}
-	f := "test"
+func TestNotFoundError(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	name := "404"
+	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusNotFound, r.Code)
+		})
+}
+
+func TestSameNameError(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
 	name := "same"
-	req, err = createPost(srv.URL, map[string]string{"f": f, "name": name})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err = hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fail()
-	}
-	req, err = createPost(srv.URL, map[string]string{"f": f, "name": name})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err = hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusConflict {
-		t.Fail()
-	}
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": "No. I am your father.",
+			"name": name,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": "No... No. That's not true! That's impossible!",
+			"name": name,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusConflict, r.Code)
+		})
 }
 
-func TestRouting_UploadWithNameAndExpires(t *testing.T) {
+func TestLargeFileError(t *testing.T) {
 	Install()
 	defer Close()
-	srv := httptest.NewServer(WpasteRouter())
-	defer srv.Close()
+	r := gofight.New()
 
-	hc := http.Client{}
-
-	expected := "Hello, world!"
-	name := "hello_world"
-
-	req, err := createPost(srv.URL, map[string]string{"f": expected, "name": name, "e": "2"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	res, err := hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("status not OK")
-	}
-	res.Body.Close()
-
-	res, err = http.Get(srv.URL + "/" + name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("status not OK")
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(body) != expected {
-		t.Fail()
-	}
-
-	time.Sleep(2 * time.Second)
-
-	res, err = http.Get(srv.URL + "/" + name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.StatusCode != http.StatusGone {
-		t.Fail()
-	}
-
-	req, err = createPost(srv.URL, map[string]string{"f": expected, "e": "-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	res, err = hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.StatusCode != http.StatusBadRequest {
-		t.Fail()
-	}
+	f := strings.Repeat("0", 10<<20)
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": f,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusRequestEntityTooLarge, r.Code)
+		})
 }
