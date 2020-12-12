@@ -17,6 +17,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -25,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -96,6 +98,84 @@ func AddExpiresIn(ID, expires string) (int, error) {
 	return http.StatusOK, nil
 }
 
+// WpasteFile is data about file
+type WpasteFile struct {
+	Name         string        `json:"name"`
+	FileName     string        `json:"filename"`
+	Created      time.Time     `json:"created"`
+	ExpiresAfter time.Duration `json:"expires"`
+}
+
+// Expired return true if file expired
+func (w *WpasteFile) Expired() bool {
+	return w.Created.Add(w.ExpiresAfter).Before(time.Now())
+}
+
+// Data from file
+func (w *WpasteFile) Data() ([]byte, error) {
+	return ioutil.ReadFile(filepath.Join(FilesDir, w.FileName))
+}
+
+// OpenWpasteByName return Wpaste if exist else nil
+func OpenWpasteByName(name string, file *WpasteFile) func(tx *bbolt.Tx) error {
+	return func(tx *bbolt.Tx) error {
+		files := tx.Bucket([]byte("files"))
+		cur := files.Cursor()
+		for k, v := cur.First(); k != nil; k, v = cur.Next() {
+			var f WpasteFile
+			if err := json.Unmarshal(v, &f); err != nil {
+				return err
+			}
+			if f.Name == name {
+				*file = f
+				return nil
+			}
+		}
+		return nil
+	}
+}
+
+// CreateWpaste create in database
+func CreateWpaste(name, filename string, expiresAfter time.Duration) func(tx *bbolt.Tx) error {
+	return func(tx *bbolt.Tx) error {
+		files := tx.Bucket([]byte("files"))
+
+		f, err := json.Marshal(WpasteFile{
+			Name:         name,
+			FileName:     filename,
+			Created:      time.Now(),
+			ExpiresAfter: expiresAfter,
+		})
+		if err != nil {
+			return err
+		}
+		id, _ := files.NextSequence()
+
+		return files.Put([]byte(strconv.FormatUint(id, 10)), f)
+	}
+}
+
+// CheckUnique return true to *unique if value unique
+func CheckUnique(field string, value interface{}, unique *bool) func(tx *bbolt.Tx) error {
+	*unique = true
+	return func(tx *bbolt.Tx) error {
+		files := tx.Bucket([]byte("files"))
+		cur := files.Cursor()
+
+		for k, v := cur.First(); k != nil; k, v = cur.Next() {
+			var f WpasteFile
+			if err := json.Unmarshal(v, &f); err != nil {
+				return err
+			}
+			field := reflect.ValueOf(v).FieldByName(field)
+			if field == value {
+				*unique = false
+			}
+		}
+		return nil
+	}
+}
+
 // Help redirect to github
 func Help(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
@@ -126,18 +206,6 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	defer servFile.Close()
 
-	ID := filepath.Base(servFile.Name())
-
-	expires := r.FormValue("e")
-	if len(expires) != 0 {
-		code, err := AddExpiresIn(ID, expires)
-		if err != nil {
-			w.WriteHeader(code)
-			w.Write([]byte(err.Error()))
-			return
-		}
-	}
-
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -146,42 +214,62 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	servFile.Write(fileBytes)
+	e := r.FormValue("e")
+	var expires time.Duration
+	if len(e) != 0 {
+		addTime, err := strconv.Atoi(e)
+		if err != nil {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			w.Write([]byte("422 - Invalid time format"))
+			return
+		} else if addTime < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("400 - Time shold be positive"))
+			return
+		}
+		expires = time.Duration(addTime) * time.Second
+	} else {
+		expires = time.Duration(30*24) * time.Hour
+	}
 
-	w.Write([]byte(ID))
+	name := filepath.Base(servFile.Name())
+
+	if err = db.Update(CreateWpaste(name, name, expires)); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Something bad happened!"))
+		return
+	}
+
+	w.Write([]byte(name))
 }
 
 // SendFile respond file by it ID
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
-	var expired bool
-	err := db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("expires"))
-		expires := b.Get([]byte(ID))
-		if expires != nil {
-			var exp int64
-			fmt.Sscanf(string(expires), "%d", &exp)
-			expired = time.Now().UTC().After(time.Unix(exp, 0).UTC())
-		}
-		return nil
-	})
-	if err != nil {
+	var file WpasteFile
+	if err := db.View(OpenWpasteByName(ID, &file)); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Something bad happened!"))
 		return
 	}
-	if expired {
+	if len(file.FileName) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("404 - File not found"))
+		return
+	}
+	if file.Expired() {
 		w.WriteHeader(http.StatusGone)
 		fmt.Fprintf(w, "410 - File %v is no longer available", ID)
 		return
 	}
-	file, err := ioutil.ReadFile(filepath.Join(FilesDir, ID))
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "404 - File %v not found", ID)
+	if data, err := file.Data(); err == nil {
+		w.Write(data)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Something bad happened!"))
 		return
 	}
-	w.Write(file)
 }
 
 // WpasteRouter make router with all needed Handlers
@@ -215,12 +303,12 @@ var db *bbolt.DB
 
 func initDB() {
 	var err error
-	db, err = bbolt.Open("data.db", 0600, nil)
+	db, err = bbolt.Open(filepath.Join(BaseDir, "data.db"), 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("expires"))
+		_, err := tx.CreateBucketIfNotExists([]byte("files"))
 		return err
 	})
 	if err != nil {
