@@ -176,6 +176,17 @@ func CheckUnique(field string, value interface{}, unique *bool) func(tx *bbolt.T
 	}
 }
 
+// HTTPError write status code to header and description to body
+func HTTPError(w http.ResponseWriter, code int, description string) {
+	w.WriteHeader(code)
+	w.Write([]byte(description))
+}
+
+// HTTPServerError id equivalent for HTTPError which write http.StatusInternalServerError
+func HTTPServerError(w http.ResponseWriter) {
+	HTTPError(w, http.StatusInternalServerError, "500 - Something bad happened")
+}
+
 // Help redirect to github
 func Help(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
@@ -184,8 +195,7 @@ func Help(w http.ResponseWriter, r *http.Request) {
 // UploadFile save file and response it ID
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength > 10<<20 {
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		w.Write([]byte("413 - Max content size is 10MiB"))
+		HTTPError(w, http.StatusRequestEntityTooLarge, "413 - Max content size is 10MiB")
 		return
 	}
 
@@ -195,12 +205,10 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	servFile, err := CreateUserFile(FilesDir, r.FormValue("name"))
 
 	if os.IsExist(err) {
-		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte("409 - This filename already taken!"))
+		HTTPError(w, http.StatusConflict, "409 - This filename already taken!")
 		return
 	} else if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Something bad happened!"))
+		HTTPServerError(w)
 		return
 	}
 
@@ -208,8 +216,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Something bad happened!"))
+		HTTPServerError(w)
 		return
 	}
 
@@ -219,12 +226,10 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	if len(e) != 0 {
 		addTime, err := strconv.Atoi(e)
 		if err != nil {
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			w.Write([]byte("422 - Invalid time format"))
+			HTTPError(w, http.StatusUnprocessableEntity, "422 - Invalid time format")
 			return
 		} else if addTime < 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("400 - Time shold be positive"))
+			HTTPError(w, http.StatusBadRequest, "400 - Time shold be positive")
 			return
 		}
 		expires = time.Duration(addTime) * time.Second
@@ -235,8 +240,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	name := filepath.Base(servFile.Name())
 
 	if err = db.Update(CreateWpaste(name, name, expires)); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Something bad happened!"))
+		HTTPServerError(w)
 		return
 	}
 
@@ -249,25 +253,21 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 	ID := vars["id"]
 	var file WpasteFile
 	if err := db.View(OpenWpasteByName(ID, &file)); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Something bad happened!"))
+		HTTPServerError(w)
 		return
 	}
 	if len(file.FileName) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("404 - File not found"))
+		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	}
 	if file.Expired() {
-		w.WriteHeader(http.StatusGone)
-		fmt.Fprintf(w, "410 - File %v is no longer available", ID)
+		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
 	}
 	if data, err := file.Data(); err == nil {
 		w.Write(data)
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Something bad happened!"))
+		HTTPServerError(w)
 		return
 	}
 }
