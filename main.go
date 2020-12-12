@@ -167,8 +167,8 @@ func CheckUnique(field string, value interface{}, unique *bool) func(tx *bbolt.T
 			if err := json.Unmarshal(v, &f); err != nil {
 				return err
 			}
-			field := reflect.ValueOf(v).FieldByName(field)
-			if field == value {
+			field := reflect.ValueOf(f).FieldByName(field)
+			if field.String() == value {
 				*unique = false
 			}
 		}
@@ -202,12 +202,28 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	data := r.FormValue("f")
 	file := bytes.NewReader([]byte(data))
 
-	servFile, err := CreateUserFile(FilesDir, r.FormValue("name"))
+	var unique bool
+	var filename string
 
-	if os.IsExist(err) {
-		HTTPError(w, http.StatusConflict, "409 - This filename already taken!")
-		return
-	} else if err != nil {
+	for !unique {
+		filename = RandomString(3)
+		db.View(CheckUnique("FileName", filename, &unique))
+	}
+
+	name := r.FormValue("name")
+	if len(name) == 0 {
+		name = filename
+	} else {
+		db.View(CheckUnique("Name", name, &unique))
+		if !unique {
+			HTTPError(w, http.StatusConflict, "409 - This filename already taken!")
+			return
+		}
+	}
+
+	servFile, err := os.OpenFile(filepath.Join(FilesDir, filename), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+
+	if err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -237,9 +253,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		expires = time.Duration(30*24) * time.Hour
 	}
 
-	name := filepath.Base(servFile.Name())
-
-	if err = db.Update(CreateWpaste(name, name, expires)); err != nil {
+	if err = db.Update(CreateWpaste(name, filename, expires)); err != nil {
 		HTTPServerError(w)
 		return
 	}
