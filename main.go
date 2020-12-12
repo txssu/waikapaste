@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gomarkdown/markdown"
 	"github.com/gorilla/mux"
 	"go.etcd.io/bbolt"
 )
@@ -136,7 +137,13 @@ func HTTPServerError(w http.ResponseWriter) {
 
 // Help redirect to github
 func Help(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "https://github.com/waika28/wpaste.cyou", http.StatusSeeOther)
+	file, err := ioutil.ReadFile(filepath.Join(BaseDir, "README.md"))
+	if err != nil {
+		log.Println(err)
+		HTTPServerError(w)
+		return
+	}
+	w.Write([]byte(markdown.ToHTML(file, nil, nil)))
 }
 
 // UploadFile save file and response it ID
