@@ -144,6 +144,8 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength > 10<<20 {
 		HTTPError(w, http.StatusRequestEntityTooLarge, "413 - Max content size is 10MiB")
 		return
+	} else if len(r.FormValue("f")) == 0 {
+		HTTPError(w, http.StatusBadRequest, `400 - "f" field required`)
 	}
 
 	data := r.FormValue("f")
