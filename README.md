@@ -7,6 +7,14 @@
 1. `cat file.txt | curl -F 'f=<-' wpaste.cyou`
 2. Share
 
+| Method   | Path   | Param | Result |
+|:--------:|:------:|--------|--------|
+|GET       |/       |        |This README file
+|GET       |/\<name>|        |File by name
+|POST      |/       |f=file  |Random name for access to your file*
+|POST      |/       |f=f, e=3600  |After 3600sec (1 hour) file will not be available
+|POST      |/       |f=f, name=Myname  |File with access by specifed name
+*default expires time is 30 days
 
 ## LICENSE
 wpaste - easy code sharing  
