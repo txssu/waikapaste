@@ -3,6 +3,7 @@
 SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 . $SCRIPTS_DIR/build.sh
+cp $DIR/README.md $BUILD_DIR/README.md
 
 . $SCRIPTS_DIR/.env
 
