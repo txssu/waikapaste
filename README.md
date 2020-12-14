@@ -2,6 +2,7 @@
 ## Description
 [wpaste.cyou](https://wpaste.cyou) is a service for easy share your code with others. Just send code and share link.
 
+[Source](https://github.com/waika28/wpaste.cyou)
 ## Using
 
 1. `cat file.txt | curl -F 'f=<-' wpaste.cyou`
