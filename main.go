@@ -16,7 +16,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -49,7 +48,7 @@ func RandomString(length int) string {
 // WpasteFile is data about file
 type WpasteFile struct {
 	Name         string        `json:"name"`
-	FileName     string        `json:"filename"`
+	Data         string        `json:"data"`
 	Created      time.Time     `json:"created"`
 	ExpiresAfter time.Duration `json:"expires"`
 }
@@ -57,11 +56,6 @@ type WpasteFile struct {
 // Expired return true if file expired
 func (w *WpasteFile) Expired() bool {
 	return w.Created.Add(w.ExpiresAfter).Before(time.Now())
-}
-
-// Data from file
-func (w *WpasteFile) Data() ([]byte, error) {
-	return ioutil.ReadFile(filepath.Join(FilesDir, w.FileName))
 }
 
 // OpenWpasteByName return Wpaste if exist else nil
@@ -152,47 +146,26 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	wpaste := WpasteFile{Created: time.Now()}
 
-	data := r.FormValue("f")
-	file := bytes.NewReader([]byte(data))
-
-	var unique bool
-	var filename string
-
-	for !unique {
-		filename = RandomString(3)
-		db.View(CheckUnique("FileName", filename, &unique))
-	}
+	wpaste.Data = r.FormValue("f")
 
 	name := r.FormValue("name")
+
 	if len(name) == 0 {
-		name = filename
+		name = RandomString(3)
+		var unique bool
+		for !unique {
+			db.View(CheckUnique("Name", name, &unique))
+		}
 	} else {
+		var unique bool
 		db.View(CheckUnique("Name", name, &unique))
 		if !unique {
 			HTTPError(w, http.StatusConflict, "409 - This filename already taken!")
 			return
 		}
 	}
-
 	wpaste.Name = name
-	wpaste.FileName = filename
 
-	servFile, err := os.OpenFile(filepath.Join(FilesDir, filename), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
-
-	if err != nil {
-		HTTPServerError(w)
-		return
-	}
-
-	defer servFile.Close()
-
-	fileBytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		HTTPServerError(w)
-		return
-	}
-
-	servFile.Write(fileBytes)
 	e := r.FormValue("e")
 	var expires time.Duration
 	if len(e) != 0 {
@@ -211,7 +184,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	wpaste.ExpiresAfter = expires
 
-	if err = db.Update(CreateWpaste(&wpaste)); err != nil {
+	if err := db.Update(CreateWpaste(&wpaste)); err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -228,7 +201,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		HTTPServerError(w)
 		return
 	}
-	if len(file.FileName) == 0 {
+	if len(file.Name) == 0 {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	}
@@ -236,12 +209,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
 	}
-	if data, err := file.Data(); err == nil {
-		w.Write(data)
-	} else {
-		HTTPServerError(w)
-		return
-	}
+	w.Write([]byte(file.Data))
 }
 
 // WpasteRouter make router with all needed Handlers
