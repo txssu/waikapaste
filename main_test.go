@@ -128,3 +128,44 @@ func TestLargeFileError(t *testing.T) {
 			assert.Equal(t, http.StatusRequestEntityTooLarge, r.Code)
 		})
 }
+
+
+func TestProtectedFile(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	password := "USA. Top secret" 
+
+	var name string
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": "42",
+			"ap": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+			name = r.Body.String()
+		})
+
+	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+
+	r.GET("/"+name).
+		SetQuery(gofight.H{
+			"ap": "China. Top public",
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+
+	r.GET("/"+name).
+		SetQuery(gofight.H{
+			"ap": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+}

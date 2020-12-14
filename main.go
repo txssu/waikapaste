@@ -47,10 +47,11 @@ func RandomString(length int) string {
 
 // WpasteFile is data about file
 type WpasteFile struct {
-	Name         string        `json:"name"`
-	Data         string        `json:"data"`
-	Created      time.Time     `json:"created"`
-	ExpiresAfter time.Duration `json:"expires"`
+	Name           string        `json:"name"`
+	Data           string        `json:"data"`
+	Created        time.Time     `json:"created"`
+	AccessPassword string        `json:"acesspass"`
+	ExpiresAfter   time.Duration `json:"expires"`
 }
 
 // Expired return true if file expired
@@ -184,6 +185,8 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	wpaste.ExpiresAfter = expires
 
+	wpaste.AccessPassword = r.FormValue("ap")
+
 	if err := db.Update(CreateWpaste(&wpaste)); err != nil {
 		HTTPServerError(w)
 		return
@@ -201,14 +204,18 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		HTTPServerError(w)
 		return
 	}
+	r.ParseForm()
 	if len(file.Name) == 0 {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
-	}
-	if file.Expired() {
+	} else if file.Expired() {
 		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
+	} else if len(file.AccessPassword) != 0 && file.AccessPassword != r.Form.Get("ap") {
+		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
+		return
 	}
+
 	w.Write([]byte(file.Data))
 }
 
@@ -219,14 +226,13 @@ func WpasteRouter() *mux.Router {
 	Router.HandleFunc("/", Help).Methods("GET")
 	Router.HandleFunc("/", UploadFile).Methods("POST")
 
-	Router.HandleFunc("/{id}", SendFile)
+	Router.HandleFunc("/{id}", SendFile).Methods("GET")
 	return Router
 }
 
 // Working directory
 var (
-	FilesDir string
-	BaseDir  string
+	BaseDir string
 )
 
 // SetDirectories specify working directories
@@ -236,7 +242,6 @@ func SetDirectories() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	FilesDir = filepath.Join(BaseDir, "files")
 }
 
 var db *bbolt.DB
@@ -256,13 +261,9 @@ func initDB() {
 	}
 }
 
-// Install prepare to start:
-// 1. Set working dirs
-// 2. Make directory for user files
-// 3. Set random seed
+// Install prepare to start
 func Install() {
 	SetDirectories()
-	os.Mkdir(FilesDir, 0766)
 	rand.Seed(time.Now().UTC().UnixNano())
 	initDB()
 }
