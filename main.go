@@ -84,16 +84,11 @@ func OpenWpasteByName(name string, file *WpasteFile) func(tx *bbolt.Tx) error {
 }
 
 // CreateWpaste create in database
-func CreateWpaste(name, filename string, expiresAfter time.Duration) func(tx *bbolt.Tx) error {
+func CreateWpaste(wpaste *WpasteFile) func(tx *bbolt.Tx) error {
 	return func(tx *bbolt.Tx) error {
 		files := tx.Bucket([]byte("files"))
 
-		f, err := json.Marshal(WpasteFile{
-			Name:         name,
-			FileName:     filename,
-			Created:      time.Now(),
-			ExpiresAfter: expiresAfter,
-		})
+		f, err := json.Marshal(wpaste)
 		if err != nil {
 			return err
 		}
@@ -155,6 +150,8 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		HTTPError(w, http.StatusBadRequest, `400 - "f" field required`)
 	}
 
+	wpaste := WpasteFile{Created: time.Now()}
+
 	data := r.FormValue("f")
 	file := bytes.NewReader([]byte(data))
 
@@ -176,6 +173,9 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	wpaste.Name = name
+	wpaste.FileName = filename
 
 	servFile, err := os.OpenFile(filepath.Join(FilesDir, filename), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 
@@ -209,7 +209,9 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		expires = time.Duration(30*24) * time.Hour
 	}
 
-	if err = db.Update(CreateWpaste(name, filename, expires)); err != nil {
+	wpaste.ExpiresAfter = expires
+
+	if err = db.Update(CreateWpaste(&wpaste)); err != nil {
 		HTTPServerError(w)
 		return
 	}
