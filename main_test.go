@@ -169,3 +169,92 @@ func TestProtectedFile(t *testing.T) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
 }
+
+
+func TestEditFile(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	data := "42"
+	newData := "43"
+	password := "USA. Top secret" 
+
+	var name string
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": data,
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+			name = r.Body.String()
+		})
+
+	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+			assert.Equal(t, data, r.Body.String())
+		})
+
+	r.PUT("/"+name).
+		SetForm(gofight.H{
+			"f": newData,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+
+	r.PUT("/"+name).
+		SetForm(gofight.H{
+			"f": newData,
+			"ep": "China. Top public",
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+
+	r.PUT("/"+name).
+		SetForm(gofight.H{
+			"f": newData,
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+	
+	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+			assert.Equal(t, newData, r.Body.String())
+		})
+}
+
+func TestEditFileWithoutEP(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	data := "42"
+	newData := "43"
+	password := "USA. Top secret" 
+
+	var name string
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": data,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+			name = r.Body.String()
+		})
+
+	r.PUT("/"+name).
+		SetForm(gofight.H{
+			"f": newData,
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+}

@@ -11,9 +11,13 @@
 |:--------:|:------:|--------|--------|
 |GET       |/       |        |This README file
 |GET       |/\<name>|        |File by name
+|GET       |/\<name>|ap=pass |Protected file by name 
 |POST      |/       |f=file  |Random name for access to your file*
 |POST      |/       |f=f, e=3600  |After 3600sec (1 hour) file will not be available
 |POST      |/       |f=f, name=Myname  |File with access by specifed name
+|POST      |/       |f=f, ap=pass | Access to file by password
+|POST      |/       |f=f, ep=pass | Access to edit file
+|PUT       |/\<name>|f=f, ep=pass | Change content to f
 *default expires time is 30 days
 
 ## LICENSE

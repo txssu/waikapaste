@@ -51,6 +51,8 @@ type WpasteFile struct {
 	Data           string        `json:"data"`
 	Created        time.Time     `json:"created"`
 	AccessPassword string        `json:"acesspass"`
+	EditPassword   string        `json:"editpass"`
+	Edited         time.Time     `json:"edited"`
 	ExpiresAfter   time.Duration `json:"expires"`
 }
 
@@ -64,7 +66,7 @@ func OpenWpasteByName(name string, file *WpasteFile) func(tx *bbolt.Tx) error {
 	return func(tx *bbolt.Tx) error {
 		files := tx.Bucket([]byte("files"))
 		cur := files.Cursor()
-		for k, v := cur.First(); k != nil; k, v = cur.Next() {
+		for k, v := cur.Last(); k != nil; k, v = cur.Prev() {
 			var f WpasteFile
 			if err := json.Unmarshal(v, &f); err != nil {
 				return err
@@ -186,6 +188,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	wpaste.ExpiresAfter = expires
 
 	wpaste.AccessPassword = r.FormValue("ap")
+	wpaste.EditPassword = r.FormValue("ep")
 
 	if err := db.Update(CreateWpaste(&wpaste)); err != nil {
 		HTTPServerError(w)
@@ -219,6 +222,40 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(file.Data))
 }
 
+// EditFile put new file
+func EditFile(w http.ResponseWriter, r *http.Request) {
+	if r.ContentLength > 10<<20 {
+		HTTPError(w, http.StatusRequestEntityTooLarge, "413 - Max content size is 10MiB")
+		return
+	} else if len(r.FormValue("f")) == 0 {
+		HTTPError(w, http.StatusBadRequest, `400 - "f" field required`)
+	}
+	vars := mux.Vars(r)
+	ID := vars["id"]
+
+	var file WpasteFile
+	db.View(OpenWpasteByName(ID, &file))
+
+	if len(file.Name) == 0 {
+		HTTPError(w, http.StatusNotFound, "404 - File not found")
+		return
+	} else if file.Expired() {
+		HTTPError(w, http.StatusGone, "410 - File is no longer available")
+		return
+	} else if len(file.EditPassword) == 0 || file.EditPassword != r.FormValue("ep") {
+		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
+		return
+	}
+
+	file.Data = r.FormValue("f")
+	file.Edited = time.Now()
+	
+	if err := db.Update(CreateWpaste(&file)); err != nil {
+		HTTPServerError(w)
+		return
+	}
+}
+
 // WpasteRouter make router with all needed Handlers
 func WpasteRouter() *mux.Router {
 	Router := mux.NewRouter().StrictSlash(true)
@@ -227,6 +264,7 @@ func WpasteRouter() *mux.Router {
 	Router.HandleFunc("/", UploadFile).Methods("POST")
 
 	Router.HandleFunc("/{id}", SendFile).Methods("GET")
+	Router.HandleFunc("/{id}", EditFile).Methods("PUT")
 	return Router
 }
 
