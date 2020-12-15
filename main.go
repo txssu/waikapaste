@@ -54,6 +54,7 @@ type WpasteFile struct {
 	EditPassword   string        `json:"editpass"`
 	Edited         time.Time     `json:"edited"`
 	ExpiresAfter   time.Duration `json:"expires"`
+	Deleted        bool          `json:"deleted"`
 }
 
 // Expired return true if file expired
@@ -72,6 +73,9 @@ func OpenWpasteByName(name string, file *WpasteFile) func(tx *bbolt.Tx) error {
 				return err
 			}
 			if f.Name == name {
+				if f.Deleted {
+					return nil
+				}
 				*file = f
 				return nil
 			}
@@ -127,7 +131,7 @@ func HTTPServerError(w http.ResponseWriter) {
 	HTTPError(w, http.StatusInternalServerError, "500 - Something bad happened")
 }
 
-// Help redirect to github
+// Help return README.md
 func Help(w http.ResponseWriter, r *http.Request) {
 	file, err := ioutil.ReadFile(filepath.Join(BaseDir, "README.md"))
 	if err != nil {
@@ -249,7 +253,32 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 
 	file.Data = r.FormValue("f")
 	file.Edited = time.Now()
-	
+
+	if err := db.Update(CreateWpaste(&file)); err != nil {
+		HTTPServerError(w)
+		return
+	}
+}
+
+// DeleteFile set deleted flag to true
+func DeleteFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	ID := vars["id"]
+
+	var file WpasteFile
+	db.View(OpenWpasteByName(ID, &file))
+
+	r.ParseForm()
+	if len(file.Name) == 0 {
+		HTTPError(w, http.StatusNotFound, "404 - File not found")
+		return
+	} else if len(file.EditPassword) == 0 || file.EditPassword != r.FormValue("ep") {
+		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
+		return
+	}
+
+	file.Deleted = true
+
 	if err := db.Update(CreateWpaste(&file)); err != nil {
 		HTTPServerError(w)
 		return
@@ -265,6 +294,7 @@ func WpasteRouter() *mux.Router {
 
 	Router.HandleFunc("/{id}", SendFile).Methods("GET")
 	Router.HandleFunc("/{id}", EditFile).Methods("PUT")
+	Router.HandleFunc("/{id}", DeleteFile).Methods("DELETE")
 	return Router
 }
 

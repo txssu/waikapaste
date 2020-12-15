@@ -98,7 +98,7 @@ func TestSameNameError(t *testing.T) {
 	name := "same"
 	r.POST("/").
 		SetForm(gofight.H{
-			"f": "No. I am your father.",
+			"f":    "No. I am your father.",
 			"name": name,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -106,7 +106,7 @@ func TestSameNameError(t *testing.T) {
 		})
 	r.POST("/").
 		SetForm(gofight.H{
-			"f": "No... No. That's not true! That's impossible!",
+			"f":    "No... No. That's not true! That's impossible!",
 			"name": name,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -129,18 +129,17 @@ func TestLargeFileError(t *testing.T) {
 		})
 }
 
-
 func TestProtectedFile(t *testing.T) {
 	Install()
 	defer Close()
 	r := gofight.New()
 
-	password := "USA. Top secret" 
+	password := "USA. Top secret"
 
 	var name string
 	r.POST("/").
 		SetForm(gofight.H{
-			"f": "42",
+			"f":  "42",
 			"ap": password,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -170,7 +169,6 @@ func TestProtectedFile(t *testing.T) {
 		})
 }
 
-
 func TestEditFile(t *testing.T) {
 	Install()
 	defer Close()
@@ -178,12 +176,12 @@ func TestEditFile(t *testing.T) {
 
 	data := "42"
 	newData := "43"
-	password := "USA. Top secret" 
+	password := "USA. Top secret"
 
 	var name string
 	r.POST("/").
 		SetForm(gofight.H{
-			"f": data,
+			"f":  data,
 			"ep": password,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -207,7 +205,7 @@ func TestEditFile(t *testing.T) {
 
 	r.PUT("/"+name).
 		SetForm(gofight.H{
-			"f": newData,
+			"f":  newData,
 			"ep": "China. Top public",
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -216,13 +214,13 @@ func TestEditFile(t *testing.T) {
 
 	r.PUT("/"+name).
 		SetForm(gofight.H{
-			"f": newData,
+			"f":  newData,
 			"ep": password,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
-	
+
 	r.GET("/"+name).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -237,7 +235,7 @@ func TestEditFileWithoutEP(t *testing.T) {
 
 	data := "42"
 	newData := "43"
-	password := "USA. Top secret" 
+	password := "USA. Top secret"
 
 	var name string
 	r.POST("/").
@@ -251,10 +249,43 @@ func TestEditFileWithoutEP(t *testing.T) {
 
 	r.PUT("/"+name).
 		SetForm(gofight.H{
-			"f": newData,
+			"f":  newData,
 			"ep": password,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+}
+
+func TestDeleteFile(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	data := "China"
+	password := "maodzedun"
+
+	var name string
+	r.POST("/").
+		SetForm(gofight.H{
+			"f":  data,
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+			name = r.Body.String()
+		})
+
+	r.DELETE("/"+name).
+		SetQuery(gofight.H{
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+
+	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusNotFound, r.Code)
 		})
 }
