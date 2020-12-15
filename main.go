@@ -65,8 +65,8 @@ func (w *WpasteFile) Expired() bool {
 func OpenWpasteByName(name string, file *WpasteFile) func(tx *bbolt.Tx) error {
 	return func(tx *bbolt.Tx) error {
 		files := tx.Bucket([]byte("files"))
-		cur := files.Cursor()
-		for k, v := cur.Last(); k != nil; k, v = cur.Prev() {
+		for id := files.Sequence(); id > 0; id-- {
+			v := files.Get([]byte(strconv.FormatUint(id, 10)))
 			var f WpasteFile
 			if err := json.Unmarshal(v, &f); err != nil {
 				return err
