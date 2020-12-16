@@ -63,25 +63,28 @@ func (w *WpasteFile) Expired() bool {
 }
 
 // OpenWpasteByName return Wpaste if exist else nil
-func OpenWpasteByName(name string, file *WpasteFile) func(tx *bbolt.Tx) error {
-	return func(tx *bbolt.Tx) error {
-		files := tx.Bucket([]byte("files"))
-		for id := files.Sequence(); id > 0; id-- {
-			v := files.Get([]byte(strconv.FormatUint(id, 10)))
-			var f WpasteFile
-			if err := json.Unmarshal(v, &f); err != nil {
-				return err
-			}
-			if f.Name == name {
-				if f.Deleted {
-					return nil
-				}
-				*file = f
-				return nil
-			}
-		}
-		return nil
+func OpenWpasteByName(name string) (file *WpasteFile, err error) {
+	tx, err := db.Begin(false)
+	if err != nil {
+		return
 	}
+	defer tx.Rollback()
+	files := tx.Bucket([]byte("files"))
+	for id := files.Sequence(); id > 0; id-- {
+		v := files.Get([]byte(strconv.FormatUint(id, 10)))
+		var f WpasteFile
+		if err = json.Unmarshal(v, &f); err != nil {
+			return
+		}
+		if f.Name == name {
+			if f.Deleted {
+				return
+			}
+			file = &f
+			return
+		}
+	}
+	return
 }
 
 // CreateWpaste create in database
@@ -206,13 +209,13 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
-	var file WpasteFile
-	if err := db.View(OpenWpasteByName(ID, &file)); err != nil {
+	file, err := OpenWpasteByName(ID)
+	if err != nil {
 		HTTPServerError(w)
 		return
 	}
 	r.ParseForm()
-	if len(file.Name) == 0 {
+	if file == nil {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	} else if file.Expired() {
@@ -223,7 +226,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte(file.Data))
+	w.Write([]byte((*file).Data))
 }
 
 // EditFile put new file
@@ -237,10 +240,13 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	var file WpasteFile
-	db.View(OpenWpasteByName(ID, &file))
+	file, err := OpenWpasteByName(ID)
+	if err != nil {
+		HTTPServerError(w)
+		return
+	}
 
-	if len(file.Name) == 0 {
+	if file == nil {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	} else if file.Expired() {
@@ -254,7 +260,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	file.Data = r.FormValue("f")
 	file.Edited = time.Now()
 
-	if err := db.Update(CreateWpaste(&file)); err != nil {
+	if err := db.Update(CreateWpaste(file)); err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -265,11 +271,14 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	var file WpasteFile
-	db.View(OpenWpasteByName(ID, &file))
+	file, err := OpenWpasteByName(ID)
+	if err != nil {
+		HTTPServerError(w)
+		return
+	}
 
 	r.ParseForm()
-	if len(file.Name) == 0 {
+	if file == nil {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	} else if len(file.EditPassword) == 0 || file.EditPassword != r.FormValue("ep") {
@@ -279,7 +288,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	file.Deleted = true
 
-	if err := db.Update(CreateWpaste(&file)); err != nil {
+	if err := db.Update(CreateWpaste(file)); err != nil {
 		HTTPServerError(w)
 		return
 	}
