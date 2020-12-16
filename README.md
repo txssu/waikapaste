@@ -19,6 +19,7 @@
 |POST      |/       |f=f, ap=pass     |Access to file by password                        |
 |POST      |/       |f=f, ep=pass     |Access to edit file                               |
 |PUT       |/\<name>|f=f, ep=pass     |Change content to f                               |
+|DELETE    |/\<name>|f=f, ep=pass     |Remove file                                       |
 
 *default expires time is 30 days
 
