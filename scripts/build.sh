@@ -8,4 +8,4 @@ echo "Clean"
 rm -rf $BUILD_DIR/*
 
 echo "Build"
-cd $DIR && env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $BUILD_DIR/wpaste
+cd $DIR && env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o $BUILD_DIR/wpaste
