@@ -107,24 +107,31 @@ func CreateWpaste(wpaste *WpasteFile) (err error) {
 }
 
 // CheckUnique return true to *unique if value unique
-func CheckUnique(field string, value interface{}, unique *bool) func(tx *bbolt.Tx) error {
-	*unique = true
-	return func(tx *bbolt.Tx) error {
-		files := tx.Bucket([]byte("files"))
-		cur := files.Cursor()
-
-		for k, v := cur.First(); k != nil; k, v = cur.Next() {
-			var f WpasteFile
-			if err := json.Unmarshal(v, &f); err != nil {
-				return err
-			}
-			field := reflect.ValueOf(f).FieldByName(field)
-			if field.String() == value {
-				*unique = false
-			}
-		}
-		return nil
+func CheckUnique(field string, value interface{}) (unique bool) {
+	tx, err := db.Begin(false)
+	if err != nil {
+		return
 	}
+	defer tx.Rollback()
+
+	unique = true
+
+	files := tx.Bucket([]byte("files"))
+	cur := files.Cursor()
+
+	for k, v := cur.First(); k != nil; k, v = cur.Next() {
+		var f WpasteFile
+		if err := json.Unmarshal(v, &f); err != nil {
+			continue
+		}
+		field := reflect.ValueOf(f).FieldByName(field)
+		if field.String() == value {
+			unique = false
+			break
+		}
+	}
+
+	return
 }
 
 // HTTPError write status code to header and description to body
@@ -166,14 +173,11 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	if len(name) == 0 {
 		name = RandomString(3)
-		var unique bool
-		for !unique {
-			db.View(CheckUnique("Name", name, &unique))
+		for !CheckUnique("Name", name) {
+			name = RandomString(3)
 		}
 	} else {
-		var unique bool
-		db.View(CheckUnique("Name", name, &unique))
-		if !unique {
+		if !CheckUnique("Name", name) {
 			HTTPError(w, http.StatusConflict, "409 - This filename already taken!")
 			return
 		}
