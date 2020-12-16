@@ -88,18 +88,22 @@ func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 }
 
 // CreateWpaste create in database
-func CreateWpaste(wpaste *WpasteFile) func(tx *bbolt.Tx) error {
-	return func(tx *bbolt.Tx) error {
-		files := tx.Bucket([]byte("files"))
-
-		f, err := json.Marshal(wpaste)
-		if err != nil {
-			return err
-		}
-		id, _ := files.NextSequence()
-
-		return files.Put([]byte(strconv.FormatUint(id, 10)), f)
+func CreateWpaste(wpaste *WpasteFile) (err error) {
+	tx, err := db.Begin(true)
+	if err != nil {
+		return
 	}
+	defer tx.Rollback()
+	files := tx.Bucket([]byte("files"))
+
+	f, err := json.Marshal(wpaste)
+	if err != nil {
+		return err
+	}
+	id, _ := files.NextSequence()
+
+	files.Put([]byte(strconv.FormatUint(id, 10)), f)
+	return tx.Commit()
 }
 
 // CheckUnique return true to *unique if value unique
@@ -154,7 +158,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		HTTPError(w, http.StatusBadRequest, `400 - "f" field required`)
 	}
 
-	wpaste := WpasteFile{Created: time.Now()}
+	wpaste := &WpasteFile{Created: time.Now()}
 
 	wpaste.Data = r.FormValue("f")
 
@@ -197,7 +201,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	wpaste.AccessPassword = r.FormValue("ap")
 	wpaste.EditPassword = r.FormValue("ep")
 
-	if err := db.Update(CreateWpaste(&wpaste)); err != nil {
+	if err := CreateWpaste(wpaste); err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -260,7 +264,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	file.Data = r.FormValue("f")
 	file.Edited = time.Now()
 
-	if err := db.Update(CreateWpaste(file)); err != nil {
+	if err := CreateWpaste(file); err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -288,7 +292,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	file.Deleted = true
 
-	if err := db.Update(CreateWpaste(file)); err != nil {
+	if err := CreateWpaste(file); err != nil {
 		HTTPServerError(w)
 		return
 	}
