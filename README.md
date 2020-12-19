@@ -3,6 +3,9 @@
 [wpaste.cyou](https://wpaste.cyou) is a service for easy share your code with others. Just send code and share link.
 
 [Source](https://github.com/waika28/wpaste.cyou)
+
+**WARNING: DO NOT USE IMPORTANT PASSWORDS AND DO NOT UPLOAD IMPORTANT FILES ONLY WITH SERVER PASSWORD. IT IS NOT SECURE.**
+
 ## Using
 
 1. `cat file.txt | curl -F 'f=<-' wpaste.cyou`
@@ -22,6 +25,14 @@
 |DELETE    |/\<name>|f=f, ep=pass     |Remove file                                       |
 
 *default expires time is 30 days
+
+For really data protection use [GnuPG](https://gnupg.org/)/[ccrypt](http://ccrypt.sourceforge.net/)
+### Example:
+```bash
+echo "secret text" | ccrypt -e -K passwd | base64 | curl -F "f=<-" wpaste.cyou
+
+curl -s wpaste.cyou/dBd | base64 -d | ccrypt -d -K passwd
+```
 
 ## LICENSE
 wpaste - easy code sharing  
