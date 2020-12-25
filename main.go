@@ -158,7 +158,7 @@ func Help(w http.ResponseWriter, r *http.Request) {
 
 // UploadFile save file and response it ID
 func UploadFile(w http.ResponseWriter, r *http.Request) {
-	if r.ContentLength > 10<<20 {
+	if r.ContentLength > 2<<20 {
 		HTTPError(w, http.StatusRequestEntityTooLarge, "413 - Max content size is 10MiB")
 		return
 	} else if len(r.FormValue("f")) == 0 {
