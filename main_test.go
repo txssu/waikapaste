@@ -33,6 +33,19 @@ func TestUploadAndGet(t *testing.T) {
 		})
 }
 
+func TestEmptyF(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	r.POST("/").
+		SetForm(gofight.H{}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusBadRequest, r.Code)
+		})
+
+}
+
 func TestUploadAndGetWithName(t *testing.T) {
 	Install()
 	defer Close()
@@ -76,6 +89,38 @@ func TestFileExpired(t *testing.T) {
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusGone, r.Code)
 		})
+}
+
+func TestExpiredNotInt(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": "something",
+			"e": "time.Time",
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnprocessableEntity, r.Code)
+		})
+
+}
+
+func TestExpiredNegative(t *testing.T) {
+	Install()
+	defer Close()
+	r := gofight.New()
+
+	r.POST("/").
+		SetForm(gofight.H{
+			"f": "something",
+			"e": "-5",
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusBadRequest, r.Code)
+		})
+
 }
 
 func TestNotFoundError(t *testing.T) {
@@ -226,6 +271,33 @@ func TestEditFile(t *testing.T) {
 			assert.Equal(t, http.StatusOK, r.Code)
 			assert.Equal(t, newData, r.Body.String())
 		})
+
+	f := strings.Repeat("0", 10<<20)
+	r.PUT("/"+name).
+		SetForm(gofight.H{
+			"f":  f,
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusRequestEntityTooLarge, r.Code)
+		})
+
+	r.PUT("/"+name).
+		SetForm(gofight.H{
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusBadRequest, r.Code)
+		})
+
+	r.PUT("/nnnnnnnn775").
+		SetForm(gofight.H{
+			"f":  "string",
+			"ep": password,
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusNotFound, r.Code)
+		})
 }
 
 func TestEditFileWithoutEP(t *testing.T) {
@@ -278,6 +350,14 @@ func TestDeleteFile(t *testing.T) {
 
 	r.DELETE("/"+name).
 		SetQuery(gofight.H{
+			"ep": "password",
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusUnauthorized, r.Code)
+		})
+
+	r.DELETE("/"+name).
+		SetQuery(gofight.H{
 			"ep": password,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -285,6 +365,14 @@ func TestDeleteFile(t *testing.T) {
 		})
 
 	r.GET("/"+name).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusNotFound, r.Code)
+		})
+
+	r.DELETE("/abcd").
+		SetQuery(gofight.H{
+			"ep": password,
+		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
 		})
