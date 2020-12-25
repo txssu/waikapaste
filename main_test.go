@@ -8,17 +8,30 @@ import (
 	"time"
 
 	"github.com/appleboy/gofight"
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUploadAndGet(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
+type Env struct {
+	r      *gofight.RequestConfig
+	router *mux.Router
+	info   map[string]string
+}
 
+var env *Env
+
+func TestStart(t *testing.T) {
+	Install()
+	env = &Env{
+		r:      gofight.New(),
+		router: WpasteRouter(),
+	}
+}
+
+func TestUploadAndGet(t *testing.T) {
 	expected := "Hello, world!"
 	var ID string
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f": expected,
 		}).
@@ -26,7 +39,7 @@ func TestUploadAndGet(t *testing.T) {
 			ID = r.Body.String()
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
-	r.GET("/"+ID).
+	env.r.GET("/"+ID).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, expected, r.Body.String())
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -34,11 +47,7 @@ func TestUploadAndGet(t *testing.T) {
 }
 
 func TestEmptyF(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusBadRequest, r.Code)
@@ -47,13 +56,9 @@ func TestEmptyF(t *testing.T) {
 }
 
 func TestUploadAndGetWithName(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	name := "testname"
 	expected := "Hello, world!"
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"name": name,
 			"f":    expected,
@@ -61,7 +66,7 @@ func TestUploadAndGetWithName(t *testing.T) {
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
-	r.GET("/"+name).
+	env.r.GET("/"+name).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, expected, r.Body.String())
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -69,13 +74,9 @@ func TestUploadAndGetWithName(t *testing.T) {
 }
 
 func TestFileExpired(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	e := 1
 	var ID string
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f": "*uck. Duck. I said duck.",
 			"e": strconv.Itoa(e),
@@ -85,18 +86,14 @@ func TestFileExpired(t *testing.T) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
 	time.Sleep(time.Duration(e) * time.Second)
-	r.GET("/"+ID).
+	env.r.GET("/"+ID).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusGone, r.Code)
 		})
 }
 
 func TestExpiredNotInt(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f": "something",
 			"e": "time.Time",
@@ -108,11 +105,7 @@ func TestExpiredNotInt(t *testing.T) {
 }
 
 func TestExpiredNegative(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f": "something",
 			"e": "-5",
@@ -124,24 +117,16 @@ func TestExpiredNegative(t *testing.T) {
 }
 
 func TestNotFoundError(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	name := "404"
-	r.GET("/"+name).
+	env.r.GET("/"+name).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
 		})
 }
 
 func TestSameNameError(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	name := "same"
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f":    "No. I am your father.",
 			"name": name,
@@ -149,7 +134,7 @@ func TestSameNameError(t *testing.T) {
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f":    "No... No. That's not true! That's impossible!",
 			"name": name,
@@ -160,12 +145,8 @@ func TestSameNameError(t *testing.T) {
 }
 
 func TestLargeFileError(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	f := strings.Repeat("0", 10<<20)
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f": f,
 		}).
@@ -175,14 +156,10 @@ func TestLargeFileError(t *testing.T) {
 }
 
 func TestProtectedFile(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	password := "USA. Top secret"
 
 	var name string
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f":  "42",
 			"ap": password,
@@ -192,39 +169,31 @@ func TestProtectedFile(t *testing.T) {
 			name = r.Body.String()
 		})
 
-	r.GET("/"+name).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
+	testCases := []struct {
+		params gofight.H
+		code   int
+	}{
+		{gofight.H{}, http.StatusUnauthorized},                          // Without password
+		{gofight.H{"ap": "China. Top public"}, http.StatusUnauthorized}, // Invalid password
+		{gofight.H{"ap": password}, http.StatusOK},
+	}
 
-	r.GET("/"+name).
-		SetQuery(gofight.H{
-			"ap": "China. Top public",
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.GET("/"+name).
-		SetQuery(gofight.H{
-			"ap": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
+	for _, cs := range testCases {
+		env.r.GET("/"+name).
+			SetQuery(cs.params).
+			Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+				assert.Equal(t, cs.code, r.Code)
+			})
+	}
 }
 
 func TestEditFile(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	data := "42"
 	newData := "43"
 	password := "USA. Top secret"
 
 	var name string
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f":  data,
 			"ep": password,
@@ -234,83 +203,67 @@ func TestEditFile(t *testing.T) {
 			name = r.Body.String()
 		})
 
-	r.GET("/"+name).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+	testCases := []struct {
+		method  string
+		path    string
+		params  gofight.H
+		asserts func(gofight.HTTPResponse, gofight.HTTPRequest)
+	}{
+		{"GET", "/" + name, gofight.H{}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 			assert.Equal(t, data, r.Body.String())
-		})
-
-	r.PUT("/"+name).
-		SetForm(gofight.H{
-			"f": newData,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Without password
+		{"PUT", "/" + name, gofight.H{"f": newData}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.PUT("/"+name).
-		SetForm(gofight.H{
-			"f":  newData,
-			"ep": "China. Top public",
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Invalid password
+		{"PUT", "/" + name, gofight.H{"f": newData, "ep": "China. Top public"}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.PUT("/"+name).
-		SetForm(gofight.H{
-			"f":  newData,
-			"ep": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Success change
+		{"PUT", "/" + name, gofight.H{"f": newData, "ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
-		})
-
-	r.GET("/"+name).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Check
+		{"GET", "/" + name, gofight.H{}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 			assert.Equal(t, newData, r.Body.String())
-		})
-
-	f := strings.Repeat("0", 10<<20)
-	r.PUT("/"+name).
-		SetForm(gofight.H{
-			"f":  f,
-			"ep": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Large data
+		{"PUT", "/" + name, gofight.H{"f": strings.Repeat("0", 10<<20), "ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusRequestEntityTooLarge, r.Code)
-		})
-
-	r.PUT("/"+name).
-		SetForm(gofight.H{
-			"ep": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Without Data
+		{"PUT", "/" + name, gofight.H{"ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusBadRequest, r.Code)
-		})
-
-	r.PUT("/nnnnnnnn775").
-		SetForm(gofight.H{
-			"f":  "string",
-			"ep": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Invalid name
+		{"PUT", "/nnnnnnnn775" + name, gofight.H{"f": newData, "ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
-		})
+		}},
+	}
+
+	for _, cs := range testCases {
+		var rq *gofight.RequestConfig
+		switch cs.method {
+		case "PUT":
+			rq = env.r.PUT(cs.path)
+		case "GET":
+			rq = env.r.GET(cs.path)
+		}
+		rq.SetForm(cs.params).
+			Run(env.router, cs.asserts)
+	}
 }
 
 func TestEditFileWithoutEP(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	data := "42"
 	newData := "43"
 	password := "USA. Top secret"
 
 	var name string
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f": data,
 		}).
@@ -319,7 +272,7 @@ func TestEditFileWithoutEP(t *testing.T) {
 			name = r.Body.String()
 		})
 
-	r.PUT("/"+name).
+	env.r.PUT("/"+name).
 		SetForm(gofight.H{
 			"f":  newData,
 			"ep": password,
@@ -330,15 +283,11 @@ func TestEditFileWithoutEP(t *testing.T) {
 }
 
 func TestDeleteFile(t *testing.T) {
-	Install()
-	defer Close()
-	r := gofight.New()
-
 	data := "China"
 	password := "maodzedun"
 
 	var name string
-	r.POST("/").
+	env.r.POST("/").
 		SetForm(gofight.H{
 			"f":  data,
 			"ep": password,
@@ -348,32 +297,43 @@ func TestDeleteFile(t *testing.T) {
 			name = r.Body.String()
 		})
 
-	r.DELETE("/"+name).
-		SetQuery(gofight.H{
-			"ep": "password",
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+	testCases := []struct {
+		method  string
+		path    string
+		params  gofight.H
+		asserts func(gofight.HTTPResponse, gofight.HTTPRequest)
+	}{
+		// Invalid password
+		{"DELETE", "/" + name, gofight.H{"ep": "password"}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.DELETE("/"+name).
-		SetQuery(gofight.H{
-			"ep": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// OK
+		{"DELETE", "/" + name, gofight.H{"ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
-		})
-
-	r.GET("/"+name).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Check deleted
+		{"GET", "/" + name, gofight.H{}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
-		})
-
-	r.DELETE("/abcd").
-		SetQuery(gofight.H{
-			"ep": password,
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		}},
+		// Delete not exist
+		{"DELETE", "/abcd", gofight.H{"ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
-		})
+		}},
+	}
+
+	for _, cs := range testCases {
+		var rq *gofight.RequestConfig
+		switch cs.method {
+		case "DELETE":
+			rq = env.r.DELETE(cs.path)
+		case "GET":
+			rq = env.r.GET(cs.path)
+		}
+		rq.SetQuery(cs.params).
+			Run(env.router, cs.asserts)
+	}
+}
+
+func TestFinish(t *testing.T) {
+	Close()
 }
