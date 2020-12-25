@@ -163,6 +163,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if len(r.FormValue("f")) == 0 {
 		HTTPError(w, http.StatusBadRequest, `400 - "f" field required`)
+		return
 	}
 
 	wpaste := &WpasteFile{Created: time.Now()}
