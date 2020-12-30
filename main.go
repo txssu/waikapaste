@@ -55,7 +55,6 @@ type WpasteFile struct {
 	EditPassword   string        `json:"editpass"`
 	Edited         time.Time     `json:"edited"`
 	ExpiresAfter   time.Duration `json:"expires"`
-	Deleted        bool          `json:"deleted"`
 }
 
 // Expired return true if file expired
@@ -86,6 +85,15 @@ func (w *WpasteFile) Save() (err error) {
 	return tx.Commit()
 }
 
+// Delete file from database
+func (w *WpasteFile) Delete() error {
+	return db.Update(func (tx *bbolt.Tx) error {
+		files := tx.Bucket([]byte("files"))
+
+		return files.Delete([]byte(strconv.FormatUint(w.id, 10)))
+	})
+}
+
 // OpenWpasteByName return Wpaste if exist else nil
 func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 	tx, err := db.Begin(false)
@@ -97,13 +105,13 @@ func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 	for id := files.Sequence(); id > 0; id-- {
 		v := files.Get([]byte(strconv.FormatUint(id, 10)))
 		var f WpasteFile
+		if len(v) == 0 {
+			continue
+		}
 		if err = json.Unmarshal(v, &f); err != nil {
 			return
 		}
 		if f.Name == name {
-			if f.Deleted {
-				return
-			}
 			file = &f
 			file.id = id
 			return
@@ -240,7 +248,6 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
-
 	w.Write([]byte((*file).Data))
 }
 
@@ -301,9 +308,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file.Deleted = true
-
-	if err := file.Save(); err != nil {
+	if err := file.Delete(); err != nil {
 		HTTPServerError(w)
 		return
 	}
