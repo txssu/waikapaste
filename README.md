@@ -16,7 +16,7 @@
 |GET       |/       |                 |This README file                                  |
 |GET       |/\<name>|                 |File by name                                      |
 |GET       |/\<name>|ap=pass          |Protected file by name                            |
-|POST      |/       |f=file           |Random name for access to your file*              |
+|POST      |/       |f=file           |Random name for access to your file               |
 |POST      |/       |f=f, e=3600      |After 3600sec (1 hour) file will not be available |
 |POST      |/       |f=f, name=Myname |File with access by specifed name                 |
 |POST      |/       |f=f, ap=pass     |Access to file by password                        |
@@ -24,7 +24,7 @@
 |PUT       |/\<name>|f=f, ep=pass     |Change content to f                               |
 |DELETE    |/\<name>|f=f, ep=pass     |Remove file                                       |
 
-*default expires time is 30 days
+*by default files haven't expires
 
 For really data protection use [GnuPG](https://gnupg.org/)/[ccrypt](http://ccrypt.sourceforge.net/)
 ### Example:

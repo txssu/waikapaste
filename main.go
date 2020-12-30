@@ -48,18 +48,21 @@ func RandomString(length int) string {
 // WpasteFile is data about file
 type WpasteFile struct {
 	id             uint64
-	Name           string        `json:"name"`
-	Data           string        `json:"data"`
-	Created        time.Time     `json:"created"`
-	AccessPassword string        `json:"acesspass"`
-	EditPassword   string        `json:"editpass"`
-	Edited         time.Time     `json:"edited"`
-	ExpiresAfter   time.Duration `json:"expires"`
+	Name           string         `json:"name"`
+	Data           string         `json:"data"`
+	Created        time.Time      `json:"created"`
+	AccessPassword string         `json:"acesspass"`
+	EditPassword   string         `json:"editpass"`
+	Edited         *time.Time     `json:"edited"`
+	ExpiresAfter   *time.Duration `json:"expires"`
 }
 
 // Expired return true if file expired
 func (w *WpasteFile) Expired() bool {
-	return w.Created.Add(w.ExpiresAfter).Before(time.Now())
+	if w.ExpiresAfter != nil {
+		return w.Created.Add(*w.ExpiresAfter).Before(time.Now())
+	}
+	return false
 }
 
 // Save file to db
@@ -87,7 +90,7 @@ func (w *WpasteFile) Save() (err error) {
 
 // Delete file from database
 func (w *WpasteFile) Delete() error {
-	return db.Update(func (tx *bbolt.Tx) error {
+	return db.Update(func(tx *bbolt.Tx) error {
 		files := tx.Bucket([]byte("files"))
 
 		return files.Delete([]byte(strconv.FormatUint(w.id, 10)))
@@ -211,11 +214,8 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		expires = time.Duration(addTime) * time.Second
-	} else {
-		expires = time.Duration(30*24) * time.Hour
+		wpaste.ExpiresAfter = &expires
 	}
-
-	wpaste.ExpiresAfter = expires
 
 	wpaste.AccessPassword = r.FormValue("ap")
 	wpaste.EditPassword = r.FormValue("ep")
@@ -280,7 +280,8 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	file.Data = r.FormValue("f")
-	file.Edited = time.Now()
+	now := time.Now()
+	file.Edited = &now
 
 	if err := file.Save(); err != nil {
 		HTTPServerError(w)
