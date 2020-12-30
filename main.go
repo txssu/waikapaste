@@ -47,6 +47,7 @@ func RandomString(length int) string {
 
 // WpasteFile is data about file
 type WpasteFile struct {
+	id             uint64
 	Name           string        `json:"name"`
 	Data           string        `json:"data"`
 	Created        time.Time     `json:"created"`
@@ -77,9 +78,11 @@ func (w *WpasteFile) Save() (err error) {
 		return
 	}
 
-	id, _ := files.NextSequence()
+	if w.id == 0 {
+		w.id, _ = files.NextSequence()
+	}
 
-	files.Put([]byte(strconv.FormatUint(id, 10)), f)
+	files.Put([]byte(strconv.FormatUint(w.id, 10)), f)
 	return tx.Commit()
 }
 
@@ -102,6 +105,7 @@ func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 				return
 			}
 			file = &f
+			file.id = id
 			return
 		}
 	}
