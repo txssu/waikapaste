@@ -22,6 +22,7 @@ var env *Env
 
 func TestStart(t *testing.T) {
 	Install()
+	go AutoDeleter(time.Second, 2*time.Second)
 	env = &Env{
 		r:      gofight.New(),
 		router: WpasteRouter(),
@@ -70,25 +71,6 @@ func TestUploadAndGetWithName(t *testing.T) {
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, expected, r.Body.String())
 			assert.Equal(t, http.StatusOK, r.Code)
-		})
-}
-
-func TestFileExpired(t *testing.T) {
-	e := 1
-	var ID string
-	env.r.POST("/").
-		SetForm(gofight.H{
-			"f": "*uck. Duck. I said duck.",
-			"e": strconv.Itoa(e),
-		}).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			ID = r.Body.String()
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
-	time.Sleep(time.Duration(e) * time.Second)
-	env.r.GET("/"+ID).
-		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusGone, r.Code)
 		})
 }
 
@@ -332,6 +314,30 @@ func TestDeleteFile(t *testing.T) {
 		rq.SetQuery(cs.params).
 			Run(env.router, cs.asserts)
 	}
+}
+
+func TestFileExpired(t *testing.T) {
+	e := 1
+	var ID string
+	env.r.POST("/").
+		SetForm(gofight.H{
+			"f": "*uck. Duck. I said duck.",
+			"e": strconv.Itoa(e),
+		}).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			ID = r.Body.String()
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
+	time.Sleep(time.Duration(e) * time.Second)
+	env.r.GET("/"+ID).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusGone, r.Code)
+		})
+	time.Sleep(time.Duration(3) * time.Second)
+	env.r.GET("/"+ID).
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusNotFound, r.Code)
+		})
 }
 
 func TestFinish(t *testing.T) {

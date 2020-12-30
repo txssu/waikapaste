@@ -351,6 +351,44 @@ func WpasteRouter() *mux.Router {
 	return Router
 }
 
+// AutoDeleter delete file from db if it expired "add" time ago
+// and check it every "tick"
+func AutoDeleter(tick, add time.Duration) {
+	timer := time.NewTicker(tick)
+	for range timer.C {
+		var toDelete [][]byte
+		db.View(func(tx *bbolt.Tx) error {
+			files := tx.Bucket([]byte("files"))
+
+			files.ForEach(func(k, v []byte) error {
+				var f WpasteFile
+				if len(v) == 0 {
+					return nil
+				}
+				if err := json.Unmarshal(v, &f); err != nil {
+					return err
+				}
+				if f.ExpiresAfter != nil && f.Created.Add(*f.ExpiresAfter).Add(add).Before(time.Now()) {
+					toDelete = append(toDelete, k)
+				}
+				return nil
+			})
+			return nil
+		})
+
+		if len(toDelete) != 0 {
+			db.Update(func(tx *bbolt.Tx) error {
+				files := tx.Bucket([]byte("files"))
+
+				for _, id := range toDelete {
+					files.Delete(id)
+				}
+				return nil
+			})
+		}
+	}
+}
+
 // Working directory
 var (
 	BaseDir string
@@ -397,5 +435,6 @@ func Close() {
 func main() {
 	Install()
 	defer Close()
+	go AutoDeleter(time.Hour, 4*time.Hour)
 	http.ListenAndServe(":9990", WpasteRouter())
 }
