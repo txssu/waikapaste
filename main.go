@@ -65,6 +65,11 @@ func (w *WpasteFile) Expired() bool {
 	return false
 }
 
+// Exist return true if file found and exist
+func (w *WpasteFile) Exist() bool {
+	return w != nil
+}
+
 // Save file to db
 func (w *WpasteFile) Save() (err error) {
 	tx, err := db.Begin(true)
@@ -238,7 +243,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseForm()
-	if file == nil {
+	if !file.Exist() {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	} else if file.Expired() {
@@ -268,7 +273,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if file == nil {
+	if !file.Exist() {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	} else if file.Expired() {
@@ -301,7 +306,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.ParseForm()
-	if file == nil {
+	if !file.Exist() {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
 	} else if len(file.EditPassword) == 0 || file.EditPassword != r.FormValue("ep") {
