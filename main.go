@@ -62,6 +62,27 @@ func (w *WpasteFile) Expired() bool {
 	return w.Created.Add(w.ExpiresAfter).Before(time.Now())
 }
 
+// Save file to db
+func (w *WpasteFile) Save() (err error) {
+	tx, err := db.Begin(true)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+
+	files := tx.Bucket([]byte("files"))
+
+	f, err := json.Marshal(w)
+	if err != nil {
+		return
+	}
+
+	id, _ := files.NextSequence()
+
+	files.Put([]byte(strconv.FormatUint(id, 10)), f)
+	return tx.Commit()
+}
+
 // OpenWpasteByName return Wpaste if exist else nil
 func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 	tx, err := db.Begin(false)
@@ -85,25 +106,6 @@ func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 		}
 	}
 	return
-}
-
-// CreateWpaste create in database
-func CreateWpaste(wpaste *WpasteFile) (err error) {
-	tx, err := db.Begin(true)
-	if err != nil {
-		return
-	}
-	defer tx.Rollback()
-	files := tx.Bucket([]byte("files"))
-
-	f, err := json.Marshal(wpaste)
-	if err != nil {
-		return err
-	}
-	id, _ := files.NextSequence()
-
-	files.Put([]byte(strconv.FormatUint(id, 10)), f)
-	return tx.Commit()
 }
 
 // CheckUnique return true to *unique if value unique
@@ -206,7 +208,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	wpaste.AccessPassword = r.FormValue("ap")
 	wpaste.EditPassword = r.FormValue("ep")
 
-	if err := CreateWpaste(wpaste); err != nil {
+	if err := wpaste.Save(); err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -269,7 +271,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	file.Data = r.FormValue("f")
 	file.Edited = time.Now()
 
-	if err := CreateWpaste(file); err != nil {
+	if err := file.Save(); err != nil {
 		HTTPServerError(w)
 		return
 	}
@@ -297,7 +299,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	file.Deleted = true
 
-	if err := CreateWpaste(file); err != nil {
+	if err := file.Save(); err != nil {
 		HTTPServerError(w)
 		return
 	}
