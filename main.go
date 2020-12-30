@@ -70,6 +70,24 @@ func (w *WpasteFile) Exist() bool {
 	return w != nil
 }
 
+// AllowAccess return true if access password is empty or
+// entered password matches access password
+func (w *WpasteFile) AllowAccess(password string) bool {
+	if len(w.AccessPassword) == 0 || password == w.AccessPassword {
+		return true
+	}
+	return false
+}
+
+// AllowEdit return true if entered password matches access password
+// if edit password is empty always return false
+func (w *WpasteFile) AllowEdit(password string) bool {
+	if len(w.EditPassword) == 0 || password != w.EditPassword {
+		return false
+	}
+	return true
+}
+
 // Save file to db
 func (w *WpasteFile) Save() (err error) {
 	tx, err := db.Begin(true)
@@ -249,7 +267,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 	} else if file.Expired() {
 		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
-	} else if len(file.AccessPassword) != 0 && file.AccessPassword != r.Form.Get("ap") {
+	} else if !file.AllowAccess(r.Form.Get("ap")) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
@@ -279,7 +297,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	} else if file.Expired() {
 		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
-	} else if len(file.EditPassword) == 0 || file.EditPassword != r.FormValue("ep") {
+	} else if !file.AllowEdit(r.FormValue("ep")) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
@@ -309,7 +327,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	if !file.Exist() {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
-	} else if len(file.EditPassword) == 0 || file.EditPassword != r.FormValue("ep") {
+	} else if !file.AllowEdit(r.FormValue("ep")) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
