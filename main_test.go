@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,12 +23,18 @@ type Env struct {
 var env *Env
 
 func TestStart(t *testing.T) {
-	Install()
-	go AutoDeleter(time.Second, 2*time.Second)
+	run("test.db", time.Second, 2*time.Second, false)
 	env = &Env{
 		r:      gofight.New(),
 		router: WpasteRouter(),
 	}
+}
+
+func TestMainPage(t *testing.T) {
+	env.r.GET("/").
+		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusOK, r.Code)
+		})
 }
 
 func TestUploadAndGet(t *testing.T) {
@@ -173,11 +181,13 @@ func TestEditFile(t *testing.T) {
 	data := "42"
 	newData := "43"
 	password := "USA. Top secret"
+	e := "1"
 
 	var name string
 	env.r.POST("/").
 		SetForm(gofight.H{
 			"f":  data,
+			"e":  e,
 			"ep": password,
 		}).
 		Run(WpasteRouter(), func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
@@ -221,8 +231,13 @@ func TestEditFile(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, r.Code)
 		}},
 		// Invalid name
-		{"PUT", "/nnnnnnnn775" + name, gofight.H{"f": newData, "ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+		{"PUT", "/nnnnnnnn775", gofight.H{"f": newData, "ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
+			time.Sleep(1*time.Second)
+		}},
+		// Edit expired file
+		{"PUT", "/" + name, gofight.H{"f": data, "ep": password}, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+			assert.Equal(t, http.StatusGone, r.Code)
 		}},
 	}
 
@@ -341,5 +356,10 @@ func TestFileExpired(t *testing.T) {
 }
 
 func TestFinish(t *testing.T) {
-	Close()
+	db.Close()
+
+	e := os.Remove("test.db")
+	if e != nil {
+		log.Fatal(e)
+	}
 }

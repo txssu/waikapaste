@@ -21,8 +21,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"time"
@@ -187,7 +185,7 @@ func HTTPServerError(w http.ResponseWriter) {
 
 // Help return README.md
 func Help(w http.ResponseWriter, r *http.Request) {
-	file, err := ioutil.ReadFile(filepath.Join(BaseDir, "README.md"))
+	file, err := ioutil.ReadFile("README.md")
 	if err != nil {
 		log.Println(err)
 		HTTPServerError(w)
@@ -389,25 +387,11 @@ func AutoDeleter(tick, add time.Duration) {
 	}
 }
 
-// Working directory
-var (
-	BaseDir string
-)
-
-// SetDirectories specify working directories
-func SetDirectories() {
-	var err error
-	BaseDir, err = filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 var db *bbolt.DB
 
-func initDB() {
+func initDB(name string) {
 	var err error
-	db, err = bbolt.Open(filepath.Join(BaseDir, "data.db"), 0600, nil)
+	db, err = bbolt.Open(name, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -420,21 +404,19 @@ func initDB() {
 	}
 }
 
-// Install prepare to start
-func Install() {
-	SetDirectories()
+func run(dbname string, tick, add time.Duration, start bool) {
 	rand.Seed(time.Now().UTC().UnixNano())
-	initDB()
-}
 
-// Close all connections
-func Close() {
-	db.Close()
+	initDB(dbname)
+
+	go AutoDeleter(tick, add)
+
+	if start {
+		defer db.Close()
+		http.ListenAndServe(":9990", WpasteRouter())
+	}
 }
 
 func main() {
-	Install()
-	defer Close()
-	go AutoDeleter(time.Hour, 4*time.Hour)
-	http.ListenAndServe(":9990", WpasteRouter())
+	run("data.db", time.Hour, 4*time.Hour, true)
 }
