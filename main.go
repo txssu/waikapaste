@@ -21,6 +21,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"reflect"
 	"strconv"
 	"time"
@@ -404,6 +405,22 @@ func initDB(name string) {
 	}
 }
 
+func logging(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			var addr string
+			// for nginx
+			if len(r.Header.Get("X-Real-IP")) != 0 {
+				addr = r.Header.Get("X-Real-IP")
+			} else {
+				addr = r.RemoteAddr
+			}
+			log.Println(r.Method, r.URL.Path, addr, r.UserAgent())
+		}()
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func run(dbname string, tick, add time.Duration, start bool) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
@@ -413,10 +430,16 @@ func run(dbname string, tick, add time.Duration, start bool) {
 
 	if start {
 		defer db.Close()
-		http.ListenAndServe(":9990", WpasteRouter())
+		http.ListenAndServe(":9990", logging(WpasteRouter()))
 	}
 }
 
 func main() {
+	f, err := os.OpenFile("log.wpaste", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
 	run("data.db", time.Hour, 4*time.Hour, true)
 }
