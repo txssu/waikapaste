@@ -17,18 +17,32 @@ import (
 type Env struct {
 	r      *gofight.RequestConfig
 	router http.Handler
-	info   map[string]string
 }
 
 var env *Env
 
-func TestStart(t *testing.T) {
+func TestMain(m *testing.M) {
+	setup()
+	code := m.Run()
+	shutdown()
+	os.Exit(code)
+}
+
+func setup() {
 	run("test.db", time.Second, 2*time.Second, false)
 	env = &Env{
 		r:      gofight.New(),
 		router: logging(WpasteRouter()),
 	}
 	log.SetOutput(ioutil.Discard)
+}
+
+func shutdown() {
+	db.Close()
+	e := os.Remove("test.db")
+	if e != nil {
+		log.Fatal(e)
+	}
 }
 
 func TestMainPage(t *testing.T) {
@@ -354,13 +368,4 @@ func TestFileExpired(t *testing.T) {
 		Run(env.router, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusNotFound, r.Code)
 		})
-}
-
-func TestFinish(t *testing.T) {
-	db.Close()
-
-	e := os.Remove("test.db")
-	if e != nil {
-		log.Fatal(e)
-	}
 }
