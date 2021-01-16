@@ -50,11 +50,15 @@ type WpasteFile struct {
 	id             uint64
 	Name           string
 	Data           string
-	Created        int64
 	AccessPassword string
 	EditPassword   string
-	Edited         int64
-	ExpiresAfter   int64
+	// Created is time in UTC and UnixNano when file created
+	Created      int64
+	// ExpiresAfter is time in nanoseconds that must pass after Created
+	// so that file is expired
+	ExpiresAfter int64
+	// Edited is time in UTC and UnixNano when file edited
+	Edited       int64
 }
 
 // Serialize enocde WpasteFile to bytes
@@ -384,7 +388,7 @@ func AutoDeleter(timer *time.Ticker, add int64) {
 				if err != nil {
 					return err
 				}
-				if f.ExpiresAfter != 0 && time.Now().UTC().UnixNano() > f.Created+f.ExpiresAfter+add{
+				if f.ExpiresAfter != 0 && time.Now().UTC().UnixNano() > f.Created+f.ExpiresAfter+add {
 					toDelete = append(toDelete, k)
 				}
 				return nil
