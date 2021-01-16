@@ -351,9 +351,8 @@ func WpasteRouter() *mux.Router {
 }
 
 // AutoDeleter delete file from db if it expired "add" time ago
-// and check it every "tick"
-func AutoDeleter(tick, add time.Duration) {
-	timer := time.NewTicker(tick)
+// and check using timer
+func AutoDeleter(timer *time.Ticker, add time.Duration) {
 	for range timer.C {
 		var toDelete [][]byte
 		db.View(func(tx *bbolt.Tx) error {
@@ -426,7 +425,7 @@ func run(dbname string, tick, add time.Duration, start bool) {
 
 	initDB(dbname)
 
-	go AutoDeleter(tick, add)
+	go AutoDeleter(time.NewTicker(tick), add)
 
 	if start {
 		defer db.Close()
