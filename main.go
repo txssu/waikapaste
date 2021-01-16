@@ -54,8 +54,7 @@ type WpasteFile struct {
 	EditPassword   string
 	// Created is time in UTC and UnixNano when file created
 	Created      int64
-	// ExpiresAfter is time in nanoseconds that must pass after Created
-	// so that file is expired
+	// ExpiresAfter is time in UTC and UnixNano when file will expires
 	ExpiresAfter int64
 	// Edited is time in UTC and UnixNano when file edited
 	Edited       int64
@@ -80,7 +79,7 @@ func DeserializeWpasteFile(d []byte) (*WpasteFile, error) {
 // Expired return true if file expired
 func (w *WpasteFile) Expired() bool {
 	if w.ExpiresAfter != 0 {
-		return time.Now().UTC().UnixNano() > w.Created+w.ExpiresAfter
+		return time.Now().UTC().UnixNano() > w.ExpiresAfter
 	}
 	return false
 }
@@ -258,7 +257,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			HTTPError(w, http.StatusBadRequest, "400 - Time shold be positive")
 			return
 		}
-		wpaste.ExpiresAfter = addTime * int64(time.Second)
+		wpaste.ExpiresAfter = wpaste.Created + addTime * int64(time.Second)
 	}
 
 	wpaste.AccessPassword = r.FormValue("ap")
@@ -388,7 +387,7 @@ func AutoDeleter(timer *time.Ticker, add int64) {
 				if err != nil {
 					return err
 				}
-				if f.ExpiresAfter != 0 && time.Now().UTC().UnixNano() > f.Created+f.ExpiresAfter+add {
+				if f.ExpiresAfter != 0 && time.Now().UTC().UnixNano() > f.ExpiresAfter+add {
 					toDelete = append(toDelete, k)
 				}
 				return nil
