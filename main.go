@@ -16,7 +16,8 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/gob"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -47,13 +48,29 @@ func RandomString(length int) string {
 // WpasteFile is data about file
 type WpasteFile struct {
 	id             uint64
-	Name           string         `json:"name"`
-	Data           string         `json:"data"`
-	Created        time.Time      `json:"created"`
-	AccessPassword string         `json:"acesspass"`
-	EditPassword   string         `json:"editpass"`
-	Edited         *time.Time     `json:"edited"`
-	ExpiresAfter   *time.Duration `json:"expires"`
+	Name           string
+	Data           string
+	Created        time.Time
+	AccessPassword string
+	EditPassword   string
+	Edited         *time.Time
+	ExpiresAfter   *time.Duration
+}
+
+// Serialize enocde WpasteFile to bytes
+func (w *WpasteFile) Serialize() ([]byte, error) {
+	var result bytes.Buffer
+	err := gob.NewEncoder(&result).Encode(w)
+	return result.Bytes(), err
+}
+
+// DeserializeWpasteFile decode bytes to WpasteFile
+func DeserializeWpasteFile(d []byte) (*WpasteFile, error) {
+	var wpaste WpasteFile
+
+	err := gob.NewDecoder(bytes.NewReader(d)).Decode(&wpaste)
+
+	return &wpaste, err
 }
 
 // Expired return true if file expired
@@ -97,7 +114,7 @@ func (w *WpasteFile) Save() (err error) {
 
 	files := tx.Bucket([]byte("files"))
 
-	f, err := json.Marshal(w)
+	f, err := w.Serialize()
 	if err != nil {
 		return
 	}
@@ -129,15 +146,17 @@ func OpenWpasteByName(name string) (file *WpasteFile, err error) {
 	files := tx.Bucket([]byte("files"))
 	for id := files.Sequence(); id > 0; id-- {
 		v := files.Get([]byte(strconv.FormatUint(id, 10)))
-		var f WpasteFile
 		if len(v) == 0 {
 			continue
 		}
-		if err = json.Unmarshal(v, &f); err != nil {
+		var f *WpasteFile
+		f, err = DeserializeWpasteFile(v)
+		if err != nil {
+			log.Println(err)
 			return
 		}
 		if f.Name == name {
-			file = &f
+			file = f
 			file.id = id
 			return
 		}
@@ -159,11 +178,12 @@ func CheckUnique(field string, value interface{}) (unique bool) {
 	cur := files.Cursor()
 
 	for k, v := cur.First(); k != nil; k, v = cur.Next() {
-		var f WpasteFile
-		if err := json.Unmarshal(v, &f); err != nil {
+		var f *WpasteFile
+		f, err = DeserializeWpasteFile(v)
+		if err != nil {
 			continue
 		}
-		field := reflect.ValueOf(f).FieldByName(field)
+		field := reflect.ValueOf(*f).FieldByName(field)
 		if field.String() == value {
 			unique = false
 			break
@@ -359,11 +379,12 @@ func AutoDeleter(timer *time.Ticker, add time.Duration) {
 			files := tx.Bucket([]byte("files"))
 
 			files.ForEach(func(k, v []byte) error {
-				var f WpasteFile
 				if len(v) == 0 {
 					return nil
 				}
-				if err := json.Unmarshal(v, &f); err != nil {
+				var f *WpasteFile
+				f, err := DeserializeWpasteFile(v)
+				if err != nil {
 					return err
 				}
 				if f.ExpiresAfter != nil && f.Created.Add(*f.ExpiresAfter).Add(add).Before(time.Now()) {
