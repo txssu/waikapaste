@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 }
 
 func setup() {
-	run("test.db", time.Second, 2*time.Second, false)
+	run("test.db", time.Second, 2*int64(time.Second), false)
 	env = &Env{
 		r:      gofight.New(),
 		router: logging(WpasteRouter()),

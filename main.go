@@ -50,11 +50,11 @@ type WpasteFile struct {
 	id             uint64
 	Name           string
 	Data           string
-	Created        time.Time
+	Created        int64
 	AccessPassword string
 	EditPassword   string
-	Edited         *time.Time
-	ExpiresAfter   *time.Duration
+	Edited         int64
+	ExpiresAfter   int64
 }
 
 // Serialize enocde WpasteFile to bytes
@@ -75,8 +75,8 @@ func DeserializeWpasteFile(d []byte) (*WpasteFile, error) {
 
 // Expired return true if file expired
 func (w *WpasteFile) Expired() bool {
-	if w.ExpiresAfter != nil {
-		return w.Created.Add(*w.ExpiresAfter).Before(time.Now())
+	if w.ExpiresAfter != 0 {
+		return time.Now().UTC().UnixNano() > w.Created+w.ExpiresAfter
 	}
 	return false
 }
@@ -225,7 +225,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wpaste := &WpasteFile{Created: time.Now()}
+	wpaste := &WpasteFile{Created: time.Now().UTC().UnixNano()}
 
 	wpaste.Data = r.FormValue("f")
 
@@ -245,9 +245,8 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	wpaste.Name = name
 
 	e := r.FormValue("e")
-	var expires time.Duration
 	if len(e) != 0 {
-		addTime, err := strconv.Atoi(e)
+		addTime, err := strconv.ParseInt(e, 10, 64)
 		if err != nil {
 			HTTPError(w, http.StatusUnprocessableEntity, "422 - Invalid time format")
 			return
@@ -255,8 +254,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			HTTPError(w, http.StatusBadRequest, "400 - Time shold be positive")
 			return
 		}
-		expires = time.Duration(addTime) * time.Second
-		wpaste.ExpiresAfter = &expires
+		wpaste.ExpiresAfter = addTime * int64(time.Second)
 	}
 
 	wpaste.AccessPassword = r.FormValue("ap")
@@ -322,8 +320,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	file.Data = r.FormValue("f")
-	now := time.Now()
-	file.Edited = &now
+	file.Edited = time.Now().UTC().UnixNano()
 
 	if err := file.Save(); err != nil {
 		HTTPServerError(w)
@@ -372,7 +369,7 @@ func WpasteRouter() *mux.Router {
 
 // AutoDeleter delete file from db if it expired "add" time ago
 // and check using timer
-func AutoDeleter(timer *time.Ticker, add time.Duration) {
+func AutoDeleter(timer *time.Ticker, add int64) {
 	for range timer.C {
 		var toDelete [][]byte
 		db.View(func(tx *bbolt.Tx) error {
@@ -387,7 +384,7 @@ func AutoDeleter(timer *time.Ticker, add time.Duration) {
 				if err != nil {
 					return err
 				}
-				if f.ExpiresAfter != nil && f.Created.Add(*f.ExpiresAfter).Add(add).Before(time.Now()) {
+				if f.ExpiresAfter != 0 && time.Now().UTC().UnixNano() > f.Created+f.ExpiresAfter+add{
 					toDelete = append(toDelete, k)
 				}
 				return nil
@@ -441,7 +438,7 @@ func logging(handler http.Handler) http.Handler {
 	})
 }
 
-func run(dbname string, tick, add time.Duration, start bool) {
+func run(dbname string, tick time.Duration, add int64, start bool) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	initDB(dbname)
@@ -461,5 +458,5 @@ func main() {
 	}
 	defer f.Close()
 	log.SetOutput(f)
-	run("data.db", time.Hour, 4*time.Hour, true)
+	run("data.db", time.Hour, 4*int64(time.Hour), true)
 }
