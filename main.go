@@ -44,7 +44,7 @@ type WpasteFile struct {
 	Edited int64
 }
 
-// Serialize enocde WpasteFile to bytes
+// Serialize encode WpasteFile to bytes
 func (w *WpasteFile) Serialize() ([]byte, error) {
 	var result bytes.Buffer
 	err := gob.NewEncoder(&result).Encode(w)
