@@ -34,8 +34,8 @@ func RandomString(length int) string {
 type WpasteFile struct {
 	Name           []byte
 	Data           []byte
-	AccessPassword string
-	EditPassword   string
+	AccessPassword []byte
+	EditPassword   []byte
 	// Created is time in UTC and UnixNano when file created
 	Created int64
 	// ExpiresAfter is time in UTC and UnixNano when file will expires
@@ -75,8 +75,8 @@ func (w *WpasteFile) Exist() bool {
 
 // AllowAccess return true if access password is empty or
 // entered password matches access password
-func (w *WpasteFile) AllowAccess(password string) bool {
-	if len(w.AccessPassword) == 0 || password == w.AccessPassword {
+func (w *WpasteFile) AllowAccess(password []byte) bool {
+	if len(w.AccessPassword) == 0 || bytes.Compare(password, w.AccessPassword) == 0 {
 		return true
 	}
 	return false
@@ -84,8 +84,8 @@ func (w *WpasteFile) AllowAccess(password string) bool {
 
 // AllowEdit return true if entered password matches access password
 // if edit password is empty always return false
-func (w *WpasteFile) AllowEdit(password string) bool {
-	if len(w.EditPassword) == 0 || password != w.EditPassword {
+func (w *WpasteFile) AllowEdit(password []byte) bool {
+	if len(w.EditPassword) == 0 || bytes.Compare(password, w.EditPassword) != 0 {
 		return false
 	}
 	return true
@@ -219,8 +219,8 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		wpaste.ExpiresAfter = wpaste.Created + addTime*int64(time.Second)
 	}
 
-	wpaste.AccessPassword = r.FormValue("ap")
-	wpaste.EditPassword = r.FormValue("ep")
+	wpaste.AccessPassword = []byte(r.FormValue("ap"))
+	wpaste.EditPassword = []byte(r.FormValue("ep"))
 
 	if err := wpaste.Save(); err != nil {
 		HTTPServerError(w)
@@ -246,7 +246,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 	} else if file.Expired() {
 		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
-	} else if !file.AllowAccess(r.Form.Get("ap")) {
+	} else if !file.AllowAccess([]byte(r.Form.Get("ap"))) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
@@ -276,7 +276,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	} else if file.Expired() {
 		HTTPError(w, http.StatusGone, "410 - File is no longer available")
 		return
-	} else if !file.AllowEdit(r.FormValue("ep")) {
+	} else if !file.AllowEdit([]byte(r.FormValue("ep"))) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
@@ -305,7 +305,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	if !file.Exist() {
 		HTTPError(w, http.StatusNotFound, "404 - File not found")
 		return
-	} else if !file.AllowEdit(r.FormValue("ep")) {
+	} else if !file.AllowEdit([]byte(r.FormValue("ep"))) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
