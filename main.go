@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -32,17 +32,16 @@ func RandomString(length int) string {
 
 // WpasteFile is data about file
 type WpasteFile struct {
-	id             uint64
-	Name           string
+	Name           []byte
 	Data           string
 	AccessPassword string
 	EditPassword   string
 	// Created is time in UTC and UnixNano when file created
-	Created      int64
+	Created int64
 	// ExpiresAfter is time in UTC and UnixNano when file will expires
 	ExpiresAfter int64
 	// Edited is time in UTC and UnixNano when file edited
-	Edited       int64
+	Edited int64
 }
 
 // Serialize enocde WpasteFile to bytes
@@ -107,11 +106,7 @@ func (w *WpasteFile) Save() (err error) {
 		return
 	}
 
-	if w.id == 0 {
-		w.id, _ = files.NextSequence()
-	}
-
-	files.Put([]byte(strconv.FormatUint(w.id, 10)), f)
+	files.Put(w.Name, f)
 	return tx.Commit()
 }
 
@@ -120,40 +115,28 @@ func (w *WpasteFile) Delete() error {
 	return db.Update(func(tx *bbolt.Tx) error {
 		files := tx.Bucket([]byte("files"))
 
-		return files.Delete([]byte(strconv.FormatUint(w.id, 10)))
+		return files.Delete(w.Name)
 	})
 }
 
 // OpenWpasteByName return Wpaste if exist else nil
-func OpenWpasteByName(name string) (file *WpasteFile, err error) {
+func OpenWpasteByName(name []byte) (file *WpasteFile, err error) {
 	tx, err := db.Begin(false)
 	if err != nil {
 		return
 	}
 	defer tx.Rollback()
 	files := tx.Bucket([]byte("files"))
-	for id := files.Sequence(); id > 0; id-- {
-		v := files.Get([]byte(strconv.FormatUint(id, 10)))
-		if len(v) == 0 {
-			continue
-		}
-		var f *WpasteFile
-		f, err = DeserializeWpasteFile(v)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		if f.Name == name {
-			file = f
-			file.id = id
-			return
-		}
+	v := files.Get(name)
+	f, err := DeserializeWpasteFile(v)
+	if err == io.EOF {
+		return nil, nil
 	}
-	return
+	return f, err
 }
 
-// CheckUnique return true to *unique if value unique
-func CheckUnique(field string, value interface{}) (unique bool) {
+// CheckNameUnique return true to *unique if value unique
+func CheckNameUnique(name []byte) (unique bool) {
 	tx, err := db.Begin(false)
 	if err != nil {
 		return
@@ -163,19 +146,9 @@ func CheckUnique(field string, value interface{}) (unique bool) {
 	unique = true
 
 	files := tx.Bucket([]byte("files"))
-	cur := files.Cursor()
 
-	for k, v := cur.First(); k != nil; k, v = cur.Next() {
-		var f *WpasteFile
-		f, err = DeserializeWpasteFile(v)
-		if err != nil {
-			continue
-		}
-		field := reflect.ValueOf(*f).FieldByName(field)
-		if field.String() == value {
-			unique = false
-			break
-		}
+	if len(files.Get(name)) != 0 {
+		return false
 	}
 
 	return
@@ -219,18 +192,19 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	name := r.FormValue("name")
 
+	// TODO change this part
 	if len(name) == 0 {
 		name = RandomString(3)
-		for !CheckUnique("Name", name) {
+		for !CheckNameUnique([]byte(name)) {
 			name = RandomString(3)
 		}
 	} else {
-		if !CheckUnique("Name", name) {
+		if !CheckNameUnique([]byte(name)) {
 			HTTPError(w, http.StatusConflict, "409 - This filename already taken!")
 			return
 		}
 	}
-	wpaste.Name = name
+	wpaste.Name = []byte(name)
 
 	e := r.FormValue("e")
 	if len(e) != 0 {
@@ -242,7 +216,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			HTTPError(w, http.StatusBadRequest, "400 - Time shold be positive")
 			return
 		}
-		wpaste.ExpiresAfter = wpaste.Created + addTime * int64(time.Second)
+		wpaste.ExpiresAfter = wpaste.Created + addTime*int64(time.Second)
 	}
 
 	wpaste.AccessPassword = r.FormValue("ap")
@@ -260,7 +234,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 func SendFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
-	file, err := OpenWpasteByName(ID)
+	file, err := OpenWpasteByName([]byte(ID))
 	if err != nil {
 		HTTPServerError(w)
 		return
@@ -290,7 +264,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	file, err := OpenWpasteByName(ID)
+	file, err := OpenWpasteByName([]byte(ID))
 	if err != nil {
 		HTTPServerError(w)
 		return
@@ -321,7 +295,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	file, err := OpenWpasteByName(ID)
+	file, err := OpenWpasteByName([]byte(ID))
 	if err != nil {
 		HTTPServerError(w)
 		return
