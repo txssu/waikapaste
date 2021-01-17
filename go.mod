@@ -12,7 +12,7 @@ require (
 	github.com/labstack/gommon v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	go.etcd.io/bbolt v1.3.5
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
+	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
 	gopkg.in/gin-gonic/gin.v1 v1.3.0 // indirect
 )

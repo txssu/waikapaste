@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/gomarkdown/markdown"
 	"github.com/gorilla/mux"
 	"go.etcd.io/bbolt"
@@ -32,16 +34,53 @@ func RandomString(length int) string {
 
 // WpasteFile is data about file
 type WpasteFile struct {
-	Name           []byte
-	Data           []byte
-	AccessPassword []byte
-	EditPassword   []byte
+	Name       []byte
+	Data       []byte
+	AccessHash []byte
+	EditHash   []byte
 	// Created is time in UTC and UnixNano when file created
 	Created int64
 	// ExpiresAfter is time in UTC and UnixNano when file will expires
 	ExpiresAfter int64
 	// Edited is time in UTC and UnixNano when file edited
 	Edited int64
+}
+
+// NewWpasteFile creates Wpastefile and return it
+func NewWpasteFile(name, data []byte, expires int64) *WpasteFile {
+	now := time.Now().UTC().UnixNano()
+	var e int64
+	if expires == 0 {
+		e = 0
+	} else {
+		e = now + expires
+	}
+	return &WpasteFile{
+		Name:         name,
+		Data:         data,
+		Created:      now,
+		ExpiresAfter: e,
+	}
+}
+
+// SetAccessHash calculates and set access password hash
+func (w *WpasteFile) SetAccessHash(password []byte) error {
+	accessHash, err := bcrypt.GenerateFromPassword(password, bcrypt.MinCost)
+	if err != nil {
+		return err
+	}
+	w.AccessHash = accessHash
+	return nil
+}
+
+// SetEditHash calculates and set edit password hash
+func (w *WpasteFile) SetEditHash(password []byte) error {
+	accessEdit, err := bcrypt.GenerateFromPassword(password, bcrypt.MinCost)
+	if err != nil {
+		return err
+	}
+	w.EditHash = accessEdit
+	return nil
 }
 
 // Serialize encode WpasteFile to bytes
@@ -76,7 +115,7 @@ func (w *WpasteFile) Exist() bool {
 // AllowAccess return true if access password is empty or
 // entered password matches access password
 func (w *WpasteFile) AllowAccess(password []byte) bool {
-	if len(w.AccessPassword) == 0 || bytes.Compare(password, w.AccessPassword) == 0 {
+	if len(w.AccessHash) == 0 || bcrypt.CompareHashAndPassword(w.AccessHash, password) == nil {
 		return true
 	}
 	return false
@@ -85,7 +124,7 @@ func (w *WpasteFile) AllowAccess(password []byte) bool {
 // AllowEdit return true if entered password matches access password
 // if edit password is empty always return false
 func (w *WpasteFile) AllowEdit(password []byte) bool {
-	if len(w.EditPassword) == 0 || bytes.Compare(password, w.EditPassword) != 0 {
+	if len(w.EditHash) == 0 || bcrypt.CompareHashAndPassword(w.EditHash, password) != nil {
 		return false
 	}
 	return true
@@ -186,9 +225,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wpaste := &WpasteFile{Created: time.Now().UTC().UnixNano()}
-
-	wpaste.Data = []byte(r.FormValue("f"))
+	data := []byte(r.FormValue("f"))
 
 	name := r.FormValue("name")
 
@@ -204,9 +241,9 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	wpaste.Name = []byte(name)
 
 	e := r.FormValue("e")
+	var expires int64
 	if len(e) != 0 {
 		addTime, err := strconv.ParseInt(e, 10, 64)
 		if err != nil {
@@ -216,11 +253,17 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			HTTPError(w, http.StatusBadRequest, "400 - Time shold be positive")
 			return
 		}
-		wpaste.ExpiresAfter = wpaste.Created + addTime*int64(time.Second)
+		expires = addTime*int64(time.Second)
 	}
 
-	wpaste.AccessPassword = []byte(r.FormValue("ap"))
-	wpaste.EditPassword = []byte(r.FormValue("ep"))
+	wpaste := NewWpasteFile([]byte(name), []byte(data), expires)
+
+	if len(r.FormValue("ap")) != 0 {
+		wpaste.SetAccessHash([]byte(r.FormValue("ap")))
+	}
+	if len(r.FormValue("ep")) != 0 {
+		wpaste.SetEditHash([]byte(r.FormValue("ep")))
+	}
 
 	if err := wpaste.Save(); err != nil {
 		HTTPServerError(w)
