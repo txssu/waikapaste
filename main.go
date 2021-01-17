@@ -33,7 +33,7 @@ func RandomString(length int) string {
 // WpasteFile is data about file
 type WpasteFile struct {
 	Name           []byte
-	Data           string
+	Data           []byte
 	AccessPassword string
 	EditPassword   string
 	// Created is time in UTC and UnixNano when file created
@@ -188,7 +188,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	wpaste := &WpasteFile{Created: time.Now().UTC().UnixNano()}
 
-	wpaste.Data = r.FormValue("f")
+	wpaste.Data = []byte(r.FormValue("f"))
 
 	name := r.FormValue("name")
 
@@ -250,7 +250,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
-	w.Write([]byte((*file).Data))
+	w.Write(file.Data)
 }
 
 // EditFile put new file
@@ -281,7 +281,7 @@ func EditFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file.Data = r.FormValue("f")
+	file.Data = []byte(r.FormValue("f"))
 	file.Edited = time.Now().UTC().UnixNano()
 
 	if err := file.Save(); err != nil {
