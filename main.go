@@ -253,7 +253,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 			HTTPError(w, http.StatusBadRequest, "400 - Time shold be positive")
 			return
 		}
-		expires = addTime*int64(time.Second)
+		expires = addTime * int64(time.Second)
 	}
 
 	wpaste := NewWpasteFile([]byte(name), []byte(data), expires)
@@ -293,6 +293,7 @@ func SendFile(w http.ResponseWriter, r *http.Request) {
 		HTTPError(w, http.StatusUnauthorized, "401 - Invalid password")
 		return
 	}
+	w.Header().Add("Content-Type", "text/plain")
 	w.Write(file.Data)
 }
 
