@@ -1,14 +1,14 @@
-# wpaste.cyou
+# wpaste
 ## Description
-[wpaste.cyou](https://wpaste.cyou) is a service for easy share your code with others. Just send code and share link.
+wpaste is a service for easy share your code with others. Just send code and share link.
 
-[Source](https://github.com/waika28/wpaste.cyou)
+[Source](https://github.com/waika28/wpaste)
 
 **WARNING: DO NOT USE IMPORTANT PASSWORDS AND DO NOT UPLOAD IMPORTANT FILES ONLY WITH SERVER PASSWORD. IT IS NOT SECURE.**
 
 ## Using
 
-1. `cat file.txt | curl -F 'f=<-' wpaste.cyou`
+1. `cat file.txt | curl -F 'f=<-' %addr_to_server%`
 2. Share
 
 | Method   | Path   | Param           | Result                                            |
@@ -30,9 +30,9 @@
 For really data protection use [GnuPG](https://gnupg.org/)/[ccrypt](http://ccrypt.sourceforge.net/)
 ### Example:
 ```bash
-echo "secret text" | ccrypt -e -K passwd | base64 | curl -F "f=<-" wpaste.cyou
+echo "secret text" | ccrypt -e -K passwd | base64 | curl -F "f=<-" %addr_to_server%
 
-curl -s wpaste.cyou/dBd | base64 -d | ccrypt -d -K passwd
+curl -s %addr_to_server%/dBd | base64 -d | ccrypt -d -K passwd
 ```
 
 ## LICENSE
